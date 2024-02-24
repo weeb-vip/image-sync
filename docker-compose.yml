@@ -1,0 +1,32 @@
+version: "2.2"
+services:
+  mysql:
+    command: --default-authentication-plugin=mysql_native_password
+    image: mysql:8.0.33
+    ports:
+      - '3306:3306'
+    environment:
+      - MYSQL_ROOT_PASSWORD=mysecretpassword
+      - MYSQL_USER=weeb
+      - MYSQL_PASSWORD=mysecretpassword
+      - MYSQL_DATABASE=weeb
+    volumes:
+      - 'weeb-api_db:/var/lib/mysql'
+    networks:
+      - weeb-api-network
+  redis:
+    image: redis:5.0.5
+    ports:
+      - '6379:6379'
+    restart: unless-stopped
+    volumes:
+      - './redis.conf:/etc/redis/redis.conf'
+      - redis_data:/data
+    networks:
+      - weeb-api-network
+
+networks:
+  weeb-api-network:
+volumes:
+  weeb-api_db:
+  redis_data:
