@@ -37,6 +37,7 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 	if data.Before == nil && data.After != nil {
 		// new record
 		if data.After.ImageUrl == nil {
+			log.Info("no image to process")
 			return nil
 		}
 		// download image
@@ -88,6 +89,7 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 	if data.Before != nil && data.After != nil {
 		// new record
 		if data.After.ImageUrl == nil {
+			log.Info("no image to process")
 			return nil
 		}
 		// download image
