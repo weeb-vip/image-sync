@@ -82,6 +82,29 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 		return nil
 	}
 
+	if data.Before != nil && data.After != nil {
+		// new record
+		if data.After.ImageUrl == nil {
+			return nil
+		}
+		// download image
+		resp, err := http.Get(*data.After.ImageUrl)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		imageData, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+
+		// save to storage
+		err = p.Storage.Put(ctx, imageData, data.After.Id)
+		if err != nil {
+			return err
+		}
+
+	}
 	log.Info("image processing complete (did not save image)")
 
 	return nil
