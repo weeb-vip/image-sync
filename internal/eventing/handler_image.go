@@ -2,20 +2,20 @@ package eventing
 
 import (
 	"context"
-	"fmt"
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/weeb-vip/image-sync/config"
+	"github.com/weeb-vip/image-sync/internal/logger"
 	"github.com/weeb-vip/image-sync/internal/services/image_processor"
 	"github.com/weeb-vip/image-sync/internal/services/processor"
 	"github.com/weeb-vip/image-sync/internal/services/storage/minio"
-
-	"log"
+	"go.uber.org/zap"
 	"time"
 )
 
 func EventingImage() error {
 	cfg := config.LoadConfigOrPanic()
 	ctx := context.Background()
+	log := logger.Get()
 
 	store := minio.NewMinioStorage(cfg.MinioConfig)
 
@@ -28,7 +28,7 @@ func EventingImage() error {
 	})
 
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("Error creating pulsar client: ", zap.String("error", err.Error()))
 		return err
 	}
 
@@ -41,21 +41,21 @@ func EventingImage() error {
 	})
 
 	defer consumer.Close()
+	ctx = logger.WithCtx(ctx, log)
 
 	// create channel to receive messages
 
 	for {
-		msg, err := consumer.Receive(context.Background())
+		msg, err := consumer.Receive(ctx)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal("Error receiving message: ", zap.String("error", err.Error()))
 		}
 
-		fmt.Printf("Received message msgId: %#v -- content: '%s'\n",
-			msg.ID(), string(msg.Payload()))
+		log.Info("Received message", zap.String("msgId", msg.ID().String()))
 
 		err = messageProcessor.Process(ctx, string(msg.Payload()), imageProcessor.Process)
 		if err != nil {
-			log.Println("error processing message: ", err)
+			log.Warn("error processing message: ", zap.String("error", err.Error()))
 			continue
 		}
 		consumer.Ack(msg)

@@ -1,7 +1,9 @@
 package image_processor
 
 import (
+	"github.com/weeb-vip/image-sync/internal/logger"
 	"github.com/weeb-vip/image-sync/internal/services/storage"
+	"go.uber.org/zap"
 	"golang.org/x/net/context"
 	"io"
 	"net/http"
@@ -22,6 +24,10 @@ func NewImageProcessor(store storage.Storage) ImageProcessor {
 }
 
 func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
+	log := logger.FromCtx(ctx)
+	log = log.With(zap.String("animeName", *data.After.TitleEn))
+	log.Info("processing image")
+
 	if data.Before == nil && data.After != nil {
 		// new record
 		if data.After.ImageUrl == nil {
