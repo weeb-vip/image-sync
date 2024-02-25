@@ -25,7 +25,13 @@ func NewImageProcessor(store storage.Storage) ImageProcessor {
 
 func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 	log := logger.FromCtx(ctx)
-	log = log.With(zap.String("animeName", *data.After.TitleEn))
+	if data.After != nil && data.After.TitleEn != nil {
+		log = log.With(zap.String("animeName", *data.After.TitleEn))
+	}
+	if data.Before != nil && data.Before.TitleEn != nil {
+		log = log.With(zap.String("animeName", *data.Before.TitleEn))
+	}
+
 	log.Info("processing image")
 
 	if data.Before == nil && data.After != nil {
