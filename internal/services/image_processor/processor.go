@@ -40,6 +40,7 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 			return nil
 		}
 		// download image
+		log.Info("downloading image", zap.String("url", *data.After.ImageUrl))
 		resp, err := http.Get(*data.After.ImageUrl)
 		if err != nil {
 			return err
@@ -51,36 +52,37 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 		}
 
 		// save to storage
-		err = p.Storage.Put(ctx, imageData, data.After.Id)
+		log.Info("uploading image to storage")
+		err = p.Storage.Put(ctx, imageData, "/"+data.After.Id)
 		if err != nil {
 			return err
 		}
 	}
 
-	if data.Before != nil && data.After == nil {
-		// new record
-		if data.Before.ImageUrl == nil {
-			return nil
-		}
-		// download image
-		resp, err := http.Get(*data.Before.ImageUrl)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-		imageData, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return err
-		}
-
-		// save to storage
-		err = p.Storage.Put(ctx, imageData, data.Before.Id)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}
+	//if data.Before != nil && data.After == nil {
+	//	// new record
+	//	if data.Before.ImageUrl == nil {
+	//		return nil
+	//	}
+	//	// download image
+	//	resp, err := http.Get(*data.Before.ImageUrl)
+	//	if err != nil {
+	//		return err
+	//	}
+	//	defer resp.Body.Close()
+	//	imageData, err := io.ReadAll(resp.Body)
+	//	if err != nil {
+	//		return err
+	//	}
+	//
+	//	// save to storage
+	//	err = p.Storage.Put(ctx, imageData, data.Before.Id)
+	//	if err != nil {
+	//		return err
+	//	}
+	//
+	//	return nil
+	//}
 
 	if data.Before != nil && data.After != nil {
 		// new record
