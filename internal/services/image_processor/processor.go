@@ -82,5 +82,7 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 		return nil
 	}
 
+	log.Info("image processing complete (did not save image)")
+
 	return nil
 }
