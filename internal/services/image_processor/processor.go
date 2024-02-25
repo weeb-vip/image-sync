@@ -57,6 +57,7 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 		if err != nil {
 			return err
 		}
+		return nil
 	}
 
 	//if data.Before != nil && data.After == nil {
@@ -107,6 +108,7 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 		if err != nil {
 			return err
 		}
+		return nil
 
 	}
 	log.Info("image processing complete (did not save image)")
