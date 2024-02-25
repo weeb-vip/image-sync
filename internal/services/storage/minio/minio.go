@@ -6,7 +6,9 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/weeb-vip/image-sync/config"
+	"github.com/weeb-vip/image-sync/internal/logger"
 	"github.com/weeb-vip/image-sync/internal/services/storage"
+	"go.uber.org/zap"
 )
 
 type MinioStorageImpl struct {
@@ -29,7 +31,15 @@ func NewMinioStorage(cfg config.MinioConfig) storage.Storage {
 }
 
 func (m *MinioStorageImpl) Put(ctx context.Context, data []byte, path string) error {
-	_, err := m.Client.PutObject(ctx, m.Bucket, path, bytes.NewReader(data), int64(len(data)), minio.PutObjectOptions{})
+	log := logger.FromCtx(ctx)
+	log.Info("uploading to minio", zap.String("path", path))
+	_, err := m.Client.PutObject(ctx, m.Bucket, path, bytes.NewReader(data), int64(len(data)), minio.PutObjectOptions{
+		ContentType: "application/octet-stream",
+	})
+
+	if err != nil {
+		log.Error("error uploading to minio", zap.String("path", path), zap.String("error", err.Error()))
+	}
 	return err
 }
 
