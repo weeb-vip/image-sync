@@ -35,6 +35,7 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 	log.Info("processing image")
 
 	if data.Before == nil && data.After != nil {
+		log.Info("New record")
 		// new record
 		if data.After.ImageUrl == nil {
 			log.Info("no image to process")
@@ -87,6 +88,7 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 	//}
 
 	if data.Before != nil && data.After != nil {
+		log.Info("Updating record")
 		// new record
 		if data.After.ImageUrl == nil {
 			log.Info("no image to process")
