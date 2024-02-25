@@ -37,6 +37,8 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 	if data.Before == nil && data.After != nil {
 		log.Info("New record")
 		// new record
+		// log after payload
+		log.Info("After", zap.Any("payload", data.After))
 		if data.After.ImageUrl == nil {
 			log.Info("no image to process")
 			return nil
