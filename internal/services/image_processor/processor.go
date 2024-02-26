@@ -7,7 +7,6 @@ import (
 	"golang.org/x/net/context"
 	"io"
 	"net/http"
-	"net/url"
 )
 
 type ImageProcessor interface {
@@ -64,7 +63,10 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 		}
 
 		file_name += data.After.Id
-		file_name = url.QueryEscape(file_name)
+		// 166 characters from the end of the file name
+		if len(file_name) > 166 {
+			file_name = file_name[len(file_name)-166:]
+		}
 		// save to storage
 		log.Info("uploading image to storage")
 		err = p.Storage.Put(ctx, imageData, "/"+file_name)
@@ -131,9 +133,9 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 
 		file_name += data.After.Id
 
-		// urlencoded file name
-		file_name = url.QueryEscape(file_name)
-
+		if len(file_name) > 166 {
+			file_name = file_name[len(file_name)-166:]
+		}
 		err = p.Storage.Put(ctx, imageData, "/"+file_name)
 		if err != nil {
 			return err
