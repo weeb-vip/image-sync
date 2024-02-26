@@ -54,19 +54,10 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 		if err != nil {
 			return err
 		}
-		var file_name string
-		if data.After.TitleEn != nil {
-			file_name += *data.After.TitleEn + "_"
-		}
 
-		file_name += data.After.Id
-		// 166 characters from the end of the file name
-		if len(file_name) > 166 {
-			file_name = file_name[len(file_name)-166:]
-		}
 		// save to storage
 		log.Info("uploading image to storage")
-		err = p.Storage.Put(ctx, imageData, "/"+file_name)
+		err = p.Storage.Put(ctx, imageData, "/"+data.After.Id)
 		if err != nil {
 			return err
 		}
@@ -120,17 +111,7 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 		// save to storage
 		log.Info("uploading image to storage")
 
-		var file_name string
-		if data.After.TitleEn != nil {
-			file_name += *data.After.TitleEn + "_"
-		}
-
-		file_name += data.After.Id
-
-		if len(file_name) > 166 {
-			file_name = file_name[len(file_name)-166:]
-		}
-		err = p.Storage.Put(ctx, imageData, "/"+file_name)
+		err = p.Storage.Put(ctx, imageData, "/"+data.After.Id)
 		if err != nil {
 			return err
 		}
