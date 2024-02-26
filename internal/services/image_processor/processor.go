@@ -58,9 +58,6 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 		if data.After.TitleEn != nil {
 			file_name += *data.After.TitleEn + "_"
 		}
-		if data.After.TitleJp != nil {
-			file_name += *data.After.TitleJp + "_"
-		}
 
 		file_name += data.After.Id
 		// 166 characters from the end of the file name
@@ -126,9 +123,6 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 		var file_name string
 		if data.After.TitleEn != nil {
 			file_name += *data.After.TitleEn + "_"
-		}
-		if data.After.TitleJp != nil {
-			file_name += *data.After.TitleJp + "_"
 		}
 
 		file_name += data.After.Id
