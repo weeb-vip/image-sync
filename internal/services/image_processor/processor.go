@@ -54,10 +54,19 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 		if err != nil {
 			return err
 		}
+		var file_name string
+		if data.After.TitleEn != nil {
+			file_name += *data.After.TitleEn + "_"
+		}
+		if data.After.TitleJp != nil {
+			file_name += *data.After.TitleJp + "_"
+		}
+
+		file_name += data.After.Id
 
 		// save to storage
 		log.Info("uploading image to storage")
-		err = p.Storage.Put(ctx, imageData, "/"+data.After.Id)
+		err = p.Storage.Put(ctx, imageData, "/"+file_name)
 		if err != nil {
 			return err
 		}
