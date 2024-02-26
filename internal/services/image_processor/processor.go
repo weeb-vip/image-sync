@@ -7,6 +7,7 @@ import (
 	"golang.org/x/net/context"
 	"io"
 	"net/http"
+	"net/url"
 )
 
 type ImageProcessor interface {
@@ -63,7 +64,7 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 		}
 
 		file_name += data.After.Id
-
+		file_name = url.QueryEscape(file_name)
 		// save to storage
 		log.Info("uploading image to storage")
 		err = p.Storage.Put(ctx, imageData, "/"+file_name)
@@ -119,7 +120,21 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 
 		// save to storage
 		log.Info("uploading image to storage")
-		err = p.Storage.Put(ctx, imageData, "/"+data.After.Id)
+
+		var file_name string
+		if data.After.TitleEn != nil {
+			file_name += *data.After.TitleEn + "_"
+		}
+		if data.After.TitleJp != nil {
+			file_name += *data.After.TitleJp + "_"
+		}
+
+		file_name += data.After.Id
+
+		// urlencoded file name
+		file_name = url.QueryEscape(file_name)
+
+		err = p.Storage.Put(ctx, imageData, "/"+file_name)
 		if err != nil {
 			return err
 		}
