@@ -3,7 +3,7 @@ name: Deploy ArgoCD
 on:
   push:
     tags:
-      - '*'
+      - '**'
 
 jobs:
     deploy:
