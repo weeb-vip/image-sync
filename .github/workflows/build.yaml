@@ -55,9 +55,8 @@ jobs:
       - name: checkout argocd repo
         uses: actions/checkout@v3
         with:
-          repository: 'weeb-vip/argocd'
+          repository: 'weeb-vip/weeb-argocd'
           token: ${{ secrets.ACCESS_TOKEN }}
-          ref: main
           path: 'argocd'
       - name: deploy to argocd
         env:
