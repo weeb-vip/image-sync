@@ -65,6 +65,8 @@ jobs:
         # pull argocd repo and push to argocd
         run: |
           cd argocd && find . -type f -name '*.yaml' -print0 | xargs -0 sed -E -i 's/(tag:[[:space:]]*).*(# '"$REPO_NAME"')/\1 '"$RELEASE_VERSION"'\2/'
+          git config --global user.email "noreply@weeb.vip"
+          git config --global user.name "weeb-vip"
           git add .
           git commit -m "feat: $REPO_NAME $RELEASE_VERSION"
           git push origin main
