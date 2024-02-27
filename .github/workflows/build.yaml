@@ -49,11 +49,11 @@ jobs:
             @semantic-release/exec@6.0.2
             @semantic-release/changelog@6.0.1
 
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Set env
         run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
       - name: checkout argocd repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: 'weeb-vip/argocd'
           token: ${{ secrets.ACCESS_TOKEN }}
