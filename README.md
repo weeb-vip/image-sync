@@ -12,4 +12,5 @@ flowchart TD
 Should be able to handle multiple types of sources. 
 
 current sources:
+
 * pulsar-postgres-source
