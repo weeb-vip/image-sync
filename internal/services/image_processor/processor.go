@@ -7,6 +7,7 @@ import (
 	"golang.org/x/net/context"
 	"io"
 	"net/http"
+	"strings"
 )
 
 type ImageProcessor interface {
@@ -57,7 +58,20 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 
 		// save to storage
 		log.Info("uploading image to storage")
-		err = p.Storage.Put(ctx, imageData, "/"+data.After.Id)
+		// convert title_en to lowercase and replace spaces with underscores
+		var title string
+		if data.After.TitleEn != nil {
+			title = strings.ToLower(*data.After.TitleEn)
+			title = strings.ReplaceAll(title, " ", "_")
+		} else if data.After.TitleJp != nil {
+			title = strings.ToLower(*data.After.TitleJp)
+			title = strings.ReplaceAll(title, " ", "_")
+		} else {
+			log.Info("no title to process")
+			return nil
+		}
+
+		err = p.Storage.Put(ctx, imageData, "/"+title)
 		if err != nil {
 			return err
 		}
@@ -111,7 +125,19 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 		// save to storage
 		log.Info("uploading image to storage")
 
-		err = p.Storage.Put(ctx, imageData, "/"+data.After.Id)
+		var title string
+		if data.After.TitleEn != nil {
+			title = strings.ToLower(*data.After.TitleEn)
+			title = strings.ReplaceAll(title, " ", "_")
+		} else if data.After.TitleJp != nil {
+			title = strings.ToLower(*data.After.TitleJp)
+			title = strings.ReplaceAll(title, " ", "_")
+		} else {
+			log.Info("no title to process")
+			return nil
+		}
+
+		err = p.Storage.Put(ctx, imageData, "/"+title)
 		if err != nil {
 			return err
 		}
