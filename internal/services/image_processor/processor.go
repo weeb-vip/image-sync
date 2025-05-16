@@ -7,6 +7,7 @@ import (
 	"golang.org/x/net/context"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -70,7 +71,8 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 			log.Info("no title to process")
 			return nil
 		}
-
+		// url encode
+		title = url.QueryEscape(title)
 		err = p.Storage.Put(ctx, imageData, "/"+title)
 		if err != nil {
 			return err
@@ -136,7 +138,8 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 			log.Info("no title to process")
 			return nil
 		}
-
+		// url encode
+		title = url.QueryEscape(title)
 		err = p.Storage.Put(ctx, imageData, "/"+title)
 		if err != nil {
 			return err
