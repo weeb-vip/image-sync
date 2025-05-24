@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 )
 
 type ImageProcessor interface {
@@ -27,127 +26,43 @@ func NewImageProcessor(store storage.Storage) ImageProcessor {
 
 func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 	log := logger.FromCtx(ctx)
-	if data.After != nil && data.After.TitleEn != nil {
-		log = log.With(zap.String("animeName", *data.After.TitleEn))
+
+	log.Info("New record")
+	// new record
+	// log after payload
+	log.Info("After", zap.Any("payload", data.Data))
+
+	// download image
+	log.Info("downloading image", zap.String("url", data.Data.URL))
+	resp, err := http.Get(data.Data.URL)
+	if err != nil {
+		return err
 	}
-	if data.Before != nil && data.Before.TitleEn != nil {
-		log = log.With(zap.String("animeName", *data.Before.TitleEn))
+	defer resp.Body.Close()
+	imageData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
 	}
 
-	log.Info("processing image")
+	// save to storage
+	log.Info("uploading image to storage")
+	// convert title_en to lowercase and replace spaces with underscores
 
-	if data.Before == nil && data.After != nil {
-		log.Info("New record")
-		// new record
-		// log after payload
-		log.Info("After", zap.Any("payload", data.After))
-		if data.After.ImageUrl == nil {
-			log.Info("no image to process")
-			return nil
-		}
-		// download image
-		log.Info("downloading image", zap.String("url", *data.After.ImageUrl))
-		resp, err := http.Get(*data.After.ImageUrl)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-		imageData, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return err
-		}
+	name := url.QueryEscape(data.Data.Name)
+	if data.Data.Type == DataTypeAnime {
 
-		// save to storage
-		log.Info("uploading image to storage")
-		// convert title_en to lowercase and replace spaces with underscores
-		var title string
-		if data.After.TitleEn != nil {
-			title = strings.ToLower(*data.After.TitleEn)
-			title = strings.ReplaceAll(title, " ", "_")
-		} else if data.After.TitleJp != nil {
-			title = strings.ToLower(*data.After.TitleJp)
-			title = strings.ReplaceAll(title, " ", "_")
-		} else {
-			log.Info("no title to process")
-			return nil
-		}
-		// url encode
-		title = url.QueryEscape(title)
-		err = p.Storage.Put(ctx, imageData, "/"+title)
-		if err != nil {
-			return err
-		}
+	} else if data.Data.Type == DataTypeCharacter {
+		name = "characters/" + name
+	} else if data.Data.Type == DataTypeStaff {
+		name = "staff/" + name
+	} else {
 		return nil
 	}
-
-	//if data.Before != nil && data.After == nil {
-	//	// new record
-	//	if data.Before.ImageUrl == nil {
-	//		return nil
-	//	}
-	//	// download image
-	//	resp, err := http.Get(*data.Before.ImageUrl)
-	//	if err != nil {
-	//		return err
-	//	}
-	//	defer resp.Body.Close()
-	//	imageData, err := io.ReadAll(resp.Body)
-	//	if err != nil {
-	//		return err
-	//	}
-	//
-	//	// save to storage
-	//	err = p.Storage.Put(ctx, imageData, data.Before.Id)
-	//	if err != nil {
-	//		return err
-	//	}
-	//
-	//	return nil
-	//}
-
-	if data.Before != nil && data.After != nil {
-		log.Info("Updating record")
-		// new record
-		if data.After.ImageUrl == nil {
-			log.Info("no image to process")
-			return nil
-		}
-		// download image
-		log.Info("downloading image", zap.String("url", *data.After.ImageUrl))
-		resp, err := http.Get(*data.After.ImageUrl)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-		imageData, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return err
-		}
-
-		// save to storage
-		log.Info("uploading image to storage")
-
-		var title string
-		if data.After.TitleEn != nil {
-			title = strings.ToLower(*data.After.TitleEn)
-			title = strings.ReplaceAll(title, " ", "_")
-		} else if data.After.TitleJp != nil {
-			title = strings.ToLower(*data.After.TitleJp)
-			title = strings.ReplaceAll(title, " ", "_")
-		} else {
-			log.Info("no title to process")
-			return nil
-		}
-		// url encode
-		title = url.QueryEscape(title)
-		err = p.Storage.Put(ctx, imageData, "/"+title)
-		if err != nil {
-			return err
-		}
-		return nil
-
+	err = p.Storage.Put(ctx, imageData, "/"+name)
+	if err != nil {
+		return err
 	}
 	log.Info("image processing complete (did not save image)")
-
 	return nil
+
 }
