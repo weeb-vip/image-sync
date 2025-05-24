@@ -30,11 +30,11 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 	log.Info("New record")
 	// new record
 	// log after payload
-	log.Info("After", zap.Any("payload", data.Data))
+	log.Info("After", zap.Any("payload", data))
 
 	// download image
-	log.Info("downloading image", zap.String("url", data.Data.URL))
-	resp, err := http.Get(data.Data.URL)
+	log.Info("downloading image", zap.String("url", data.URL))
+	resp, err := http.Get(data.URL)
 	if err != nil {
 		return err
 	}
@@ -48,12 +48,15 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 	log.Info("uploading image to storage")
 	// convert title_en to lowercase and replace spaces with underscores
 
-	name := url.QueryEscape(data.Data.Name)
-	if data.Data.Type == DataTypeAnime {
+	name := url.QueryEscape(data.Name)
 
-	} else if data.Data.Type == DataTypeCharacter {
+	var dataType DataType
+	dataType = data.Type
+	if dataType == DataTypeAnime {
+
+	} else if dataType == DataTypeCharacter {
 		name = "characters/" + name
-	} else if data.Data.Type == DataTypeStaff {
+	} else if dataType == DataTypeStaff {
 		name = "staff/" + name
 	} else {
 		return nil

@@ -9,12 +9,8 @@ const (
 	DataTypeStaff     DataType = "Staff"
 )
 
-type Schema struct {
-	Name string   `json:"name"`
-	URL  string   `json:"url"`
-	Type DataType `json:"type"`
-}
-
 type Payload struct {
-	Data Schema `json:"data"`
+	Name string `json:"name"`
+	URL  string `json:"url"`
+	Type string `json:"type"`
 }
