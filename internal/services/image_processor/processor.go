@@ -63,6 +63,7 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 	}
 	err = p.Storage.Put(ctx, imageData, "/"+name)
 	if err != nil {
+		log.Error("error uploading image to storage", zap.String("error", err.Error()))
 		return err
 	}
 	log.Info("image processing complete (did not save image)")
