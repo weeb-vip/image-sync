@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/cenkalti/backoff/v4"
+	"github.com/weeb-vip/image-sync/internal/logger"
+	"go.uber.org/zap"
 )
 
 type ProcessorFunc[T any] func(ctx context.Context, data T) error
@@ -21,6 +23,9 @@ func NewProcessor[T any]() *Processor[T] {
 }
 
 func (p *Processor[T]) Parse(ctx context.Context, payload string) (*T, error) {
+	// log raw payload as string
+	log := logger.FromCtx(ctx)
+	log.Info("Raw payload: ", zap.String("payload", payload))
 	// parse from json
 	var data T
 	err := json.Unmarshal([]byte(payload), &data)
