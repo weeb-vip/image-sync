@@ -56,6 +56,7 @@ func EventingImage() error {
 		err = messageProcessor.Process(ctx, string(msg.Payload()), imageProcessor.Process)
 		if err != nil {
 			log.Warn("error processing message: ", zap.String("error", err.Error()))
+			consumer.Ack(msg)
 			continue
 		}
 		consumer.Ack(msg)
