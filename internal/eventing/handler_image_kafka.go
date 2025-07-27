@@ -35,6 +35,7 @@ func EventingImageKafka() error {
 		Debug:                    nil,
 	}
 
+	log.Info("Creating Kafka driver", zap.String("bootstrapServers", cfg.KafkaConfig.BootstrapServers))
 	driver := epKafka.NewKafkaDriver(kafkaConfig)
 	defer func(driver drivers.Driver[*kafka.Message]) {
 		err := driver.Close()
@@ -45,16 +46,19 @@ func EventingImageKafka() error {
 		}
 	}(driver)
 
+	log.Info("Creating processor for Kafka messages", zap.String("topic", cfg.KafkaConfig.Topic))
 	imageProcessor := image_processor.NewImageProcessor(store)
 
 	processorInstance := processor.NewProcessor[*kafka.Message, image_processor.Payload](driver, cfg.KafkaConfig.Topic, imageProcessor.Process)
 
+	log.Info("initializing backoff retry middleware", zap.String("topic", cfg.KafkaConfig.Topic))
 	backoffRetryInstance := backoffretry.NewBackoffRetry[image_processor.Payload](driver, backoffretry.Config{
 		MaxRetries: 3,
 		HeaderKey:  "retry",
 		RetryQueue: "retry-queue",
 	})
 
+	log.Info("Starting Kafka processor", zap.String("topic", cfg.KafkaConfig.Topic))
 	err := processorInstance.
 		AddMiddleware(backoffRetryInstance.Process).
 		Run(ctx)
