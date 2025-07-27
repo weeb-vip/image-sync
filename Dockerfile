@@ -20,7 +20,7 @@ RUN go mod download
 COPY . .
 
 # Build the Go app
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/main.go
+RUN CGO_ENABLED=1 GOOS=linux go build -ldflags '-linkmode external -extldflags "-static"' -a -installsuffix cgo -o main ./cmd/main.go
 
 # Path: Dockerfile
 # golang dockerfile
