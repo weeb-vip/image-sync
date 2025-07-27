@@ -23,7 +23,7 @@ func EventingImageKafka() error {
 	store := minio.NewMinioStorage(cfg.MinioConfig)
 
 	offset := "earliest"
-	debug := "consumer,cgrp,topic,fetch,assign"
+	debug := "consumer,cgrp,topic,fetch"
 	kafkaConfig := &epKafka.KafkaConfig{
 		ConsumerGroupName:        cfg.KafkaConfig.ConsumerGroupName,
 		BootstrapServers:         cfg.KafkaConfig.BootstrapServers,
