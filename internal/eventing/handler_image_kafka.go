@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/ThatCatDev/ep/v2/drivers"
 	epKafka "github.com/ThatCatDev/ep/v2/drivers/kafka"
-	"github.com/ThatCatDev/ep/v2/middlewares/kafka/backoffretry"
 	"github.com/ThatCatDev/ep/v2/processor"
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/weeb-vip/image-sync/config"
@@ -52,15 +51,14 @@ func EventingImageKafka() error {
 	processorInstance := processor.NewProcessor[*kafka.Message, image_processor.Payload](driver, cfg.KafkaConfig.Topic, imageProcessor.Process)
 
 	log.Info("initializing backoff retry middleware", zap.String("topic", cfg.KafkaConfig.Topic))
-	backoffRetryInstance := backoffretry.NewBackoffRetry[image_processor.Payload](driver, backoffretry.Config{
-		MaxRetries: 3,
-		HeaderKey:  "retry",
-		RetryQueue: "retry-queue",
-	})
+	//backoffRetryInstance := backoffretry.NewBackoffRetry[image_processor.Payload](driver, backoffretry.Config{
+	//	MaxRetries: 3,
+	//	HeaderKey:  "retry",
+	//	RetryQueue: "retry-queue",
+	//})
 
 	log.Info("Starting Kafka processor", zap.String("topic", cfg.KafkaConfig.Topic))
 	err := processorInstance.
-		AddMiddleware(backoffRetryInstance.Process).
 		Run(ctx)
 
 	if err != nil && ctx.Err() == nil { // Ignore error if caused by context cancellation
