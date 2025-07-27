@@ -29,14 +29,15 @@ func NewImageProcessor(store storage.Storage) ImageProcessor {
 func (p *ImageProcessorImpl) Process(ctx context.Context, data event.Event[*kafka.Message, Payload]) (event.Event[*kafka.Message, Payload], error) {
 	log := logger.FromCtx(ctx)
 
+	dataPayload := data.Payload.Data
 	log.Info("New record")
 	// new record
 	// log after payload
 	log.Info("Got message", zap.Any("payload", data.Payload))
 
 	// download image
-	log.Info("downloading image", zap.String("url", data.Payload.URL))
-	resp, err := http.Get(data.Payload.URL)
+	log.Info("downloading image", zap.String("url", dataPayload.URL))
+	resp, err := http.Get(dataPayload.URL)
 	if err != nil {
 		return data, err
 	}
@@ -50,10 +51,10 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data event.Event[*kafk
 	log.Info("uploading image to storage")
 	// convert title_en to lowercase and replace spaces with underscores
 
-	name := url.QueryEscape(data.Payload.Name)
+	name := url.QueryEscape(dataPayload.Name)
 
 	var dataType DataType
-	dataType = data.Payload.Type
+	dataType = dataPayload.Type
 	if dataType == DataTypeAnime {
 
 	} else if dataType == DataTypeCharacter {
