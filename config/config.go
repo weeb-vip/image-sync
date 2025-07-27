@@ -9,6 +9,7 @@ type Config struct {
 	DBConfig     DBConfig
 	PulsarConfig PulsarConfig
 	MinioConfig  MinioConfig
+	KafkaConfig  KafkaConfig
 }
 
 type AppConfig struct {
@@ -37,6 +38,12 @@ type MinioConfig struct {
 	SecretAccessKey string `default:"minio123" env:"MINIO_SECRET_ACCESS_KEY"`
 	UseSSL          bool   `default:"false" env:"MINIO_USESSL"`
 	Bucket          string `default:"anime" env:"MINIO_BUCKET"`
+}
+
+type KafkaConfig struct {
+	ConsumerGroupName string `default:"image-sync-group" env:"KAFKA_CONSUMER_GROUP_NAME"`
+	BootstrapServers  string `default:"localhost:9092" env:"KAFKA_BOOTSTRAP_SERVERS"`
+	Topic             string `default:"image-sync-topic" env:"KAFKA_TOPIC"`
 }
 
 func LoadConfigOrPanic() Config {
