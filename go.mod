@@ -3,7 +3,7 @@ module github.com/weeb-vip/image-sync
 go 1.23
 
 require (
-	github.com/ThatCatDev/ep/v2 v2.2.5
+	github.com/ThatCatDev/ep/v2 v2.2.6
 	github.com/apache/pulsar-client-go v0.14.0
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/confluentinc/confluent-kafka-go/v2 v2.11.0
