@@ -44,6 +44,8 @@ type KafkaConfig struct {
 	ConsumerGroupName string `default:"image-sync-group" env:"KAFKA_CONSUMER_GROUP_NAME"`
 	BootstrapServers  string `default:"localhost:9092" env:"KAFKA_BOOTSTRAP_SERVERS"`
 	Topic             string `default:"image-sync-topic" env:"KAFKA_TOPIC"`
+	Offset            string `default:"earliest" env:"KAFKA_OFFSET"`
+	Debug             string `default:"" env:"KAFKA_DEBUG"`
 }
 
 func LoadConfigOrPanic() Config {

@@ -21,9 +21,11 @@ func EventingImageKafka() error {
 	ctx = logger.WithCtx(ctx, log)
 
 	store := minio.NewMinioStorage(cfg.MinioConfig)
-
-	offset := "earliest"
-	debug := "consumer,cgrp,topic,fetch"
+	
+	debug := &cfg.KafkaConfig.Debug
+	if *debug == "" {
+		debug = nil
+	}
 	kafkaConfig := &epKafka.KafkaConfig{
 		ConsumerGroupName:        cfg.KafkaConfig.ConsumerGroupName,
 		BootstrapServers:         cfg.KafkaConfig.BootstrapServers,
@@ -32,9 +34,9 @@ func EventingImageKafka() error {
 		Username:                 nil,
 		Password:                 nil,
 		ConsumerSessionTimeoutMs: nil,
-		ConsumerAutoOffsetReset:  &offset,
+		ConsumerAutoOffsetReset:  &cfg.KafkaConfig.Offset,
 		ClientID:                 nil,
-		Debug:                    &debug,
+		Debug:                    debug,
 	}
 
 	log.Info("Creating Kafka driver", zap.String("bootstrapServers", cfg.KafkaConfig.BootstrapServers))
