@@ -10,6 +10,10 @@ const (
 )
 
 type Payload struct {
+	Data ImageSchema `json:"data"`
+}
+
+type ImageSchema struct {
 	Name string `json:"name"`
 	URL  string `json:"url"`
 	Type string `json:"type"`
