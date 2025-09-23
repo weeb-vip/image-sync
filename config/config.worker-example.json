@@ -1,0 +1,38 @@
+{
+  "AppConfig": {
+    "APPName": "anime-api",
+    "Port": 3000,
+    "Version": "1.0.0"
+  },
+  "WorkerConfig": {
+    "ImageProcessorWorkers": 8,
+    "KafkaImageProcessorWorkers": 6,
+    "BufferSize": 200
+  },
+  "DBConfig": {
+    "Host": "localhost",
+    "DataBase": "weeb",
+    "User": "weeb",
+    "Password": "mysecretpassword",
+    "Port": 3306
+  },
+  "PulsarConfig": {
+    "URL": "pulsar://localhost:6650",
+    "Topic": "public/default/myanimelist.public.anime",
+    "SubscribtionName": "my-sub"
+  },
+  "KafkaConfig": {
+    "ConsumerGroupName": "image-sync-group",
+    "BootstrapServers": "localhost:9092",
+    "Topic": "image-sync-topic",
+    "Offset": "earliest",
+    "Debug": ""
+  },
+  "MinioConfig": {
+    "Endpoint": "localhost:9000",
+    "AccessKeyID": "minio",
+    "SecretAccessKey": "minio123",
+    "UseSSL": false,
+    "Bucket": "anime"
+  }
+}

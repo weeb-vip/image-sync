@@ -10,6 +10,7 @@ type Config struct {
 	PulsarConfig PulsarConfig
 	MinioConfig  MinioConfig
 	KafkaConfig  KafkaConfig
+	WorkerConfig WorkerConfig
 }
 
 type AppConfig struct {
@@ -46,6 +47,12 @@ type KafkaConfig struct {
 	Topic             string `default:"image-sync-topic" env:"KAFKA_TOPIC"`
 	Offset            string `default:"earliest" env:"KAFKA_OFFSET"`
 	Debug             string `default:"" env:"KAFKA_DEBUG"`
+}
+
+type WorkerConfig struct {
+	ImageProcessorWorkers      int `default:"4" env:"WORKER_IMAGE_PROCESSOR_COUNT"`
+	KafkaImageProcessorWorkers int `default:"4" env:"WORKER_KAFKA_IMAGE_PROCESSOR_COUNT"`
+	BufferSize                 int `default:"100" env:"WORKER_BUFFER_SIZE"`
 }
 
 func LoadConfigOrPanic() Config {

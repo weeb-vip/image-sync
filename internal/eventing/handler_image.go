@@ -8,8 +8,8 @@ import (
 	"github.com/weeb-vip/image-sync/internal/services/image_processor"
 	"github.com/weeb-vip/image-sync/internal/services/processor"
 	"github.com/weeb-vip/image-sync/internal/services/storage/minio"
+	"github.com/weeb-vip/image-sync/internal/worker"
 	"go.uber.org/zap"
-	"time"
 )
 
 func EventingImage() error {
@@ -22,6 +22,17 @@ func EventingImage() error {
 	imageProcessor := image_processor.NewImageProcessor(store)
 
 	messageProcessor := processor.NewProcessor[image_processor.Payload]()
+
+	// Create worker pool for concurrent image processing
+	workerPool := worker.NewPool(cfg.WorkerConfig.ImageProcessorWorkers, cfg.WorkerConfig.BufferSize, func(ctx context.Context, payload image_processor.Payload) error {
+		return imageProcessor.Process(ctx, payload)
+	})
+
+	// Start the worker pool
+	workerPool.Start(ctx)
+	defer workerPool.Stop()
+
+	log.Info("Started worker pool", zap.Int("workers", cfg.WorkerConfig.ImageProcessorWorkers), zap.Int("bufferSize", cfg.WorkerConfig.BufferSize))
 
 	client, err := pulsar.NewClient(pulsar.ClientOptions{
 		URL: cfg.PulsarConfig.URL,
@@ -53,14 +64,25 @@ func EventingImage() error {
 
 		log.Info("Received message", zap.String("msgId", msg.ID().String()))
 
-		err = messageProcessor.Process(ctx, string(msg.Payload()), imageProcessor.Process)
+		// Parse the message payload to get the data structure
+		payload, err := messageProcessor.Parse(ctx, string(msg.Payload()))
 		if err != nil {
-			log.Warn("error processing message: ", zap.String("error", err.Error()))
+			log.Warn("error parsing message payload: ", zap.String("error", err.Error()))
 			consumer.Ack(msg)
 			continue
 		}
-		consumer.Ack(msg)
-		time.Sleep(50 * time.Millisecond)
+
+		// Submit job to worker pool
+		done := workerPool.Submit(*payload)
+
+		// Wait for processing to complete
+		go func(msg pulsar.Message, done chan error) {
+			err := <-done
+			if err != nil {
+				log.Warn("error processing message: ", zap.String("error", err.Error()))
+			}
+			consumer.Ack(msg)
+		}(msg, done)
 	}
 
 }
