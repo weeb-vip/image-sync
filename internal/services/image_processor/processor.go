@@ -58,6 +58,8 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 		name = "characters/" + name
 	} else if dataType == DataTypeStaff {
 		name = "staff/" + name
+	} else if dataType == DataTypeBanner {
+		name = "banners/" + name
 	} else {
 		return nil
 	}
