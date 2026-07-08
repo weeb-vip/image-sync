@@ -35,6 +35,11 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data event.Event[*kafk
 	// log after payload
 	log.Info("Got message", zap.Any("payload", data.Payload))
 
+	if dataPayload.URL == "" {
+		log.Warn("skipping message with empty image url", zap.Any("payload", data.Payload))
+		return data, nil
+	}
+
 	// download image
 	log.Info("downloading image", zap.String("url", dataPayload.URL))
 	resp, err := http.Get(dataPayload.URL)
@@ -69,7 +74,7 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data event.Event[*kafk
 		log.Error("error uploading image to storage", zap.String("error", err.Error()))
 		return data, err
 	}
-	log.Info("image processing complete (did not save image)")
+	log.Info("image processing complete", zap.String("name", name))
 	return data, nil
 
 }
