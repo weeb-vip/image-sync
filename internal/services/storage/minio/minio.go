@@ -3,6 +3,7 @@ package minio
 import (
 	"bytes"
 	"context"
+	"strings"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/weeb-vip/image-sync/config"
@@ -14,6 +15,7 @@ import (
 type MinioStorageImpl struct {
 	Client *minio.Client
 	Bucket string
+	Prefix string
 }
 
 func NewMinioStorage(cfg config.MinioConfig) storage.Storage {
@@ -27,13 +29,23 @@ func NewMinioStorage(cfg config.MinioConfig) storage.Storage {
 	return &MinioStorageImpl{
 		Client: minioClient,
 		Bucket: cfg.Bucket,
+		Prefix: cfg.Prefix,
 	}
+}
+
+// objectKey prepends the configured prefix so objects can live in a
+// folder of a shared bucket (e.g. r2 with one custom domain per bucket)
+func (m *MinioStorageImpl) objectKey(path string) string {
+	if m.Prefix == "" {
+		return path
+	}
+	return strings.TrimSuffix(m.Prefix, "/") + "/" + strings.TrimPrefix(path, "/")
 }
 
 func (m *MinioStorageImpl) Put(ctx context.Context, data []byte, path string) error {
 	log := logger.FromCtx(ctx)
-	log.Info("uploading to minio", zap.String("path", path))
-	_, err := m.Client.PutObject(ctx, m.Bucket, path, bytes.NewReader(data), int64(len(data)), minio.PutObjectOptions{
+	log.Info("uploading to minio", zap.String("path", m.objectKey(path)))
+	_, err := m.Client.PutObject(ctx, m.Bucket, m.objectKey(path), bytes.NewReader(data), int64(len(data)), minio.PutObjectOptions{
 		ContentType: "application/octet-stream",
 	})
 
@@ -44,7 +56,7 @@ func (m *MinioStorageImpl) Put(ctx context.Context, data []byte, path string) er
 }
 
 func (m *MinioStorageImpl) Get(ctx context.Context, path string) ([]byte, error) {
-	object, err := m.Client.GetObject(ctx, m.Bucket, path, minio.GetObjectOptions{})
+	object, err := m.Client.GetObject(ctx, m.Bucket, m.objectKey(path), minio.GetObjectOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -59,5 +71,5 @@ func (m *MinioStorageImpl) Get(ctx context.Context, path string) ([]byte, error)
 }
 
 func (m *MinioStorageImpl) Delete(ctx context.Context, path string) error {
-	return m.Client.RemoveObject(ctx, m.Bucket, path, minio.RemoveObjectOptions{})
+	return m.Client.RemoveObject(ctx, m.Bucket, m.objectKey(path), minio.RemoveObjectOptions{})
 }

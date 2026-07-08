@@ -39,6 +39,7 @@ type MinioConfig struct {
 	SecretAccessKey string `default:"minio123" env:"MINIO_SECRET_ACCESS_KEY"`
 	UseSSL          bool   `default:"false" env:"MINIO_USESSL"`
 	Bucket          string `default:"anime" env:"MINIO_BUCKET"`
+	Prefix          string `default:"" env:"MINIO_PREFIX"`
 }
 
 type KafkaConfig struct {
