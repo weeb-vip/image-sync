@@ -7,6 +7,7 @@ const (
 	DataTypeAnime     DataType = "Anime"
 	DataTypeCharacter DataType = "Character"
 	DataTypeStaff     DataType = "Staff"
+	DataTypeBanner    DataType = "Banner"
 )
 
 type Payload struct {
