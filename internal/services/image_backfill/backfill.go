@@ -20,6 +20,7 @@ package image_backfill
 
 import (
 	"context"
+	"database/sql"
 	"net/url"
 	"path"
 	"strings"
@@ -298,26 +299,63 @@ func titleSlug(title string) string {
 	return url.QueryEscape(strings.ReplaceAll(strings.ToLower(title), " ", "_"))
 }
 
+// indexBatchSize keeps each index query under Vitess's 100,000 row-per-query
+// cap. PlanetScale aborts anything larger outright — "Row count exceeded
+// 100000" — which is what stopped the character index dead once anime_character
+// grew past it.
+const indexBatchSize = 20000
+
+// scanAll walks a table in id order, a batch at a time, calling fn for each row.
+// fn returns the row's id, which becomes the cursor for the next batch — keyset
+// paging rather than OFFSET, so it stays cheap however deep it goes.
+func (b *Backfiller) scanAll(ctx context.Context, table, columns string, fn func(*sql.Rows) (string, error)) error {
+	last := ""
+	for {
+		rows, err := b.DB.DB.WithContext(ctx).
+			Table(table).
+			Select(columns).
+			Where("id > ?", last).
+			Order("id").
+			Limit(indexBatchSize).
+			Rows()
+		if err != nil {
+			return err
+		}
+
+		n := 0
+		for rows.Next() {
+			id, err := fn(rows)
+			if err != nil {
+				rows.Close()
+				return err
+			}
+			last = id
+			n++
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+		rows.Close()
+
+		// A short batch means the table is exhausted.
+		if n < indexBatchSize {
+			return nil
+		}
+	}
+}
+
 func (b *Backfiller) animeIndex(ctx context.Context) (*index, error) {
 	idx := newIndex()
 
-	rows, err := b.DB.DB.WithContext(ctx).
-		Table("anime").
-		Select("id, title_en, title_jp").
-		Rows()
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
+	err := b.scanAll(ctx, "anime", "id, title_en, title_jp", func(rows *sql.Rows) (string, error) {
 		var (
 			id      string
 			titleEn *string
 			titleJp *string
 		)
 		if err := rows.Scan(&id, &titleEn, &titleJp); err != nil {
-			return nil, err
+			return "", err
 		}
 		idx.putID(id)
 		// Producers prefer title_en and fall back to title_jp, so an object
@@ -329,27 +367,19 @@ func (b *Backfiller) animeIndex(ctx context.Context) (*index, error) {
 		if titleJp != nil {
 			idx.put(titleSlug(*titleJp), id)
 		}
-	}
+		return id, nil
+	})
 
-	return idx, rows.Err()
+	return idx, err
 }
 
 func (b *Backfiller) characterIndex(ctx context.Context) (*index, error) {
 	idx := newIndex()
 
-	rows, err := b.DB.DB.WithContext(ctx).
-		Table("anime_character").
-		Select("id, anime_id, name").
-		Rows()
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
+	err := b.scanAll(ctx, "anime_character", "id, anime_id, name", func(rows *sql.Rows) (string, error) {
 		var id, animeID, name string
 		if err := rows.Scan(&id, &animeID, &name); err != nil {
-			return nil, err
+			return "", err
 		}
 		idx.putID(id)
 		// Two producers wrote characters over time: the pulsar path keyed them
@@ -357,31 +387,24 @@ func (b *Backfiller) characterIndex(ctx context.Context) (*index, error) {
 		// are in the bucket.
 		idx.put(url.QueryEscape(name+"_"+animeID), id)
 		idx.put(url.QueryEscape(name), id)
-	}
+		return id, nil
+	})
 
-	return idx, rows.Err()
+	return idx, err
 }
 
 func (b *Backfiller) staffIndex(ctx context.Context) (*index, error) {
 	idx := newIndex()
 
-	rows, err := b.DB.DB.WithContext(ctx).
-		Table("anime_staff").
-		Select("id, given_name, family_name").
-		Rows()
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
+	err := b.scanAll(ctx, "anime_staff", "id, given_name, family_name", func(rows *sql.Rows) (string, error) {
 		var id, given, family string
 		if err := rows.Scan(&id, &given, &family); err != nil {
-			return nil, err
+			return "", err
 		}
 		idx.putID(id)
 		idx.put(url.QueryEscape(given+"_"+family), id)
-	}
+		return id, nil
+	})
 
-	return idx, rows.Err()
+	return idx, err
 }
