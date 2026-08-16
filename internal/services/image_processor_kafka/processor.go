@@ -4,12 +4,12 @@ import (
 	"github.com/ThatCatDev/ep/v2/event"
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/weeb-vip/image-sync/internal/logger"
+	"github.com/weeb-vip/image-sync/internal/services/imagepath"
 	"github.com/weeb-vip/image-sync/internal/services/storage"
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
 	"io"
 	"net/http"
-	"net/url"
 )
 
 type ImageProcessor interface {
@@ -54,29 +54,19 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data event.Event[*kafk
 
 	// save to storage
 	log.Info("uploading image to storage")
-	// convert title_en to lowercase and replace spaces with underscores
 
-	name := url.QueryEscape(dataPayload.Name)
-
-	var dataType DataType
-	dataType = dataPayload.Type
-	if dataType == DataTypeAnime {
-
-	} else if dataType == DataTypeCharacter {
-		name = "characters/" + name
-	} else if dataType == DataTypeStaff {
-		name = "staff/" + name
-	} else if dataType == DataTypeBanner {
-		name = "banners/" + name
-	} else {
+	path, ok := imagepath.For(dataPayload.Type, dataPayload.ID, dataPayload.Name)
+	if !ok {
+		log.Warn("skipping message with no storable path", zap.Any("payload", data.Payload))
 		return data, nil
 	}
-	err = p.Storage.Put(ctx, imageData, "/"+name)
+
+	err = p.Storage.Put(ctx, imageData, path)
 	if err != nil {
 		log.Error("error uploading image to storage", zap.String("error", err.Error()))
 		return data, err
 	}
-	log.Info("image processing complete", zap.String("name", name))
+	log.Info("image processing complete", zap.String("path", path))
 	return data, nil
 
 }

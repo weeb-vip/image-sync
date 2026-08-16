@@ -3,7 +3,9 @@ package minio
 import (
 	"bytes"
 	"context"
+	"net/http"
 	"strings"
+
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/weeb-vip/image-sync/config"
@@ -72,4 +74,71 @@ func (m *MinioStorageImpl) Get(ctx context.Context, path string) ([]byte, error)
 
 func (m *MinioStorageImpl) Delete(ctx context.Context, path string) error {
 	return m.Client.RemoveObject(ctx, m.Bucket, m.objectKey(path), minio.RemoveObjectOptions{})
+}
+
+// localPath is the inverse of objectKey: turns a bucket key back into the
+// leading-slashed path the rest of the service passes around.
+func (m *MinioStorageImpl) localPath(key string) string {
+	if m.Prefix != "" {
+		key = strings.TrimPrefix(key, strings.TrimSuffix(m.Prefix, "/")+"/")
+	}
+	return "/" + key
+}
+
+func (m *MinioStorageImpl) List(ctx context.Context, path string, recursive bool) <-chan storage.Entry {
+	out := make(chan storage.Entry)
+
+	// objectKey insists on a leading slash to strip; for a listing prefix an
+	// empty path means "the whole prefix", which is a legitimate input.
+	prefix := strings.TrimPrefix(m.objectKey(path), "/")
+
+	go func() {
+		defer close(out)
+		for obj := range m.Client.ListObjects(ctx, m.Bucket, minio.ListObjectsOptions{
+			Prefix:    prefix,
+			Recursive: recursive,
+		}) {
+			if obj.Err != nil {
+				select {
+				case out <- storage.Entry{Err: obj.Err}:
+				case <-ctx.Done():
+				}
+				return
+			}
+			// Non-recursive listings surface pseudo-directories as keys with a
+			// trailing slash. They are not objects, and following them is what
+			// the recursive flag is for.
+			if strings.HasSuffix(obj.Key, "/") {
+				continue
+			}
+			select {
+			case out <- storage.Entry{Path: m.localPath(obj.Key)}:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return out
+}
+
+func (m *MinioStorageImpl) Copy(ctx context.Context, srcPath, dstPath string) error {
+	_, err := m.Client.CopyObject(ctx,
+		minio.CopyDestOptions{Bucket: m.Bucket, Object: m.objectKey(dstPath)},
+		minio.CopySrcOptions{Bucket: m.Bucket, Object: m.objectKey(srcPath)},
+	)
+	return err
+}
+
+func (m *MinioStorageImpl) Exists(ctx context.Context, path string) (bool, error) {
+	_, err := m.Client.StatObject(ctx, m.Bucket, m.objectKey(path), minio.StatObjectOptions{})
+	if err != nil {
+		// HEAD has no body to carry an error code, so S3 implementations
+		// disagree on what they put here — the status is the reliable signal.
+		if minio.ToErrorResponse(err).StatusCode == http.StatusNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
