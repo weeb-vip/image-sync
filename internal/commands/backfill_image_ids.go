@@ -65,5 +65,7 @@ func init() {
 	backfillImageIDsCmd.Flags().Bool("dry-run", false, "report what would be copied without writing anything")
 	backfillImageIDsCmd.Flags().Bool("overwrite", false, "copy even when the id-keyed object already exists")
 	backfillImageIDsCmd.Flags().StringSlice("type", nil, "limit to some of anime,character,staff (default: all)")
-	backfillImageIDsCmd.Flags().Int("workers", 8, "concurrent copies")
+	// Each worker does a HEAD then a server-side copy, both network-bound, so
+	// this can sit well above the core count.
+	backfillImageIDsCmd.Flags().Int("workers", 32, "concurrent copies")
 }
