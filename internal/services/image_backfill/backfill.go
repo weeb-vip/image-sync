@@ -72,7 +72,7 @@ type Backfiller struct {
 
 func New(database *db.DB, store storage.Storage, opts Options) *Backfiller {
 	if opts.Workers <= 0 {
-		opts.Workers = 8
+		opts.Workers = 32
 	}
 	return &Backfiller{DB: database, Storage: store, Options: opts}
 }
@@ -139,16 +139,20 @@ func (b *Backfiller) wants(name string) bool {
 func (b *Backfiller) runGroup(ctx context.Context, g group, idx *index) (Stats, error) {
 	log := logger.FromCtx(ctx)
 
-	// stats is the walker's own tally, touched only here; the copy workers
-	// keep a separate one behind mu and the two are merged once they are done.
+	// stats is the walker's own tally, touched only here; the workers keep a
+	// separate one behind mu and the two are merged once they are done.
 	var (
 		mu     sync.Mutex
 		stats  Stats
-		copied Stats
+		work   Stats
 		wg     sync.WaitGroup
 		listed = b.Storage.List(ctx, g.dir, g.recursive)
 	)
 
+	// The existence check belongs here, not on the walker. It is a HEAD round
+	// trip per object, and running it inline capped the whole pass at one
+	// request at a time — a few dozen objects a second no matter how many
+	// workers were configured.
 	jobs := make(chan [2]string)
 	for i := 0; i < b.Options.Workers; i++ {
 		wg.Add(1)
@@ -156,12 +160,38 @@ func (b *Backfiller) runGroup(ctx context.Context, g group, idx *index) (Stats, 
 			defer wg.Done()
 			for job := range jobs {
 				src, dst := job[0], job[1]
+
+				if !b.Options.Overwrite {
+					exists, err := b.Storage.Exists(ctx, dst)
+					if err != nil {
+						log.Error("stat failed", zap.String("path", dst), zap.Error(err))
+						mu.Lock()
+						work.Errors++
+						mu.Unlock()
+						continue
+					}
+					if exists {
+						mu.Lock()
+						work.AlreadyDone++
+						mu.Unlock()
+						continue
+					}
+				}
+
+				if b.Options.DryRun {
+					log.Info("would copy", zap.String("src", src), zap.String("dst", dst))
+					mu.Lock()
+					work.Copied++
+					mu.Unlock()
+					continue
+				}
+
 				err := b.Storage.Copy(ctx, src, dst)
 				mu.Lock()
 				if err != nil {
-					copied.Errors++
+					work.Errors++
 				} else {
-					copied.Copied++
+					work.Copied++
 				}
 				mu.Unlock()
 				if err != nil {
@@ -205,24 +235,6 @@ func (b *Backfiller) runGroup(ctx context.Context, g group, idx *index) (Stats, 
 		}
 
 		dst := g.dir + url.QueryEscape(id)
-		if !b.Options.Overwrite {
-			exists, err := b.Storage.Exists(ctx, dst)
-			if err != nil {
-				log.Error("stat failed", zap.String("path", dst), zap.Error(err))
-				stats.Errors++
-				continue
-			}
-			if exists {
-				stats.AlreadyDone++
-				continue
-			}
-		}
-
-		if b.Options.DryRun {
-			log.Info("would copy", zap.String("src", entry.Path), zap.String("dst", dst))
-			stats.Copied++
-			continue
-		}
 
 		select {
 		case jobs <- [2]string{entry.Path, dst}:
@@ -237,7 +249,7 @@ func (b *Backfiller) runGroup(ctx context.Context, g group, idx *index) (Stats, 
 	close(jobs)
 	wg.Wait()
 
-	stats.add(copied)
+	stats.add(work)
 	return stats, listErr
 }
 
