@@ -35,6 +35,13 @@ The system supports two messaging backends:
 - Uses MinIO for object storage
 - MySQL database for metadata (via GORM)
 
+Objects are keyed by the record's **id**, never its name: `<anime id>` for
+posters, `banners/<anime id>`, `characters/<character id>`, `staff/<staff id>`.
+Producers send both `id` and `name` on the image message; `name` is only a
+fallback for messages published before ids were added. `internal/services/imagepath`
+owns that rule so the pulsar and kafka processors cannot drift apart, and
+`backfill-image-ids` re-keys objects still stored under the old name slugs.
+
 ### Configuration
 Configuration is handled via `config/config.go` with environment variable support and JSON config files.
 
@@ -53,6 +60,11 @@ go build -o main ./cmd/main.go
 
 # Run Kafka-based image sync
 ./main serve-image-sync-kafka
+
+# Re-key existing bucket objects from names to ids (one-off, idempotent)
+./main backfill-image-ids --dry-run
+./main backfill-image-ids
+./main backfill-image-ids --type anime,character --workers 16
 
 # Database migrations
 ./main migrate up

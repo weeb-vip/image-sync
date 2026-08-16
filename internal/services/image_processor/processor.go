@@ -2,12 +2,12 @@ package image_processor
 
 import (
 	"github.com/weeb-vip/image-sync/internal/logger"
+	"github.com/weeb-vip/image-sync/internal/services/imagepath"
 	"github.com/weeb-vip/image-sync/internal/services/storage"
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
 	"io"
 	"net/http"
-	"net/url"
 )
 
 type ImageProcessor interface {
@@ -46,24 +46,14 @@ func (p *ImageProcessorImpl) Process(ctx context.Context, data Payload) error {
 
 	// save to storage
 	log.Info("uploading image to storage")
-	// convert title_en to lowercase and replace spaces with underscores
 
-	name := url.QueryEscape(data.Name)
-
-	var dataType DataType
-	dataType = data.Type
-	if dataType == DataTypeAnime {
-
-	} else if dataType == DataTypeCharacter {
-		name = "characters/" + name
-	} else if dataType == DataTypeStaff {
-		name = "staff/" + name
-	} else if dataType == DataTypeBanner {
-		name = "banners/" + name
-	} else {
+	path, ok := imagepath.For(data.Type, data.ID, data.Name)
+	if !ok {
+		log.Warn("skipping message with no storable path", zap.Any("payload", data))
 		return nil
 	}
-	err = p.Storage.Put(ctx, imageData, "/"+name)
+
+	err = p.Storage.Put(ctx, imageData, path)
 	if err != nil {
 		log.Error("error uploading image to storage", zap.String("error", err.Error()))
 		return err
