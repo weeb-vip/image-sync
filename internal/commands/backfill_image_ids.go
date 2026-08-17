@@ -26,12 +26,29 @@ reported and left alone rather than guessed at.
 Originals are left in place. Re-running is safe: objects already at their id
 path are skipped unless --overwrite is passed.
 
-Banners are already keyed by anime id and are never touched.`,
+Banners are already keyed by anime id and are never touched.
+
+Each group is independent — its own table, its own bucket prefix — so they can
+be run in isolation and in any order:
+
+  ./main backfill-image-ids --type anime
+  ./main backfill-image-ids --type character
+  ./main backfill-image-ids --type staff
+
+A group that fails no longer aborts the ones after it; the run continues and
+exits non-zero at the end reporting which groups failed.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 		overwrite, _ := cmd.Flags().GetBool("overwrite")
 		types, _ := cmd.Flags().GetStringSlice("type")
 		workers, _ := cmd.Flags().GetInt("workers")
+
+		// Fail before touching the database or the bucket: a misspelt --type
+		// used to match no group at all and exit 0, reporting a clean run that
+		// had copied nothing.
+		if err := image_backfill.ValidateTypes(types); err != nil {
+			return err
+		}
 
 		cfg := config.LoadConfigOrPanic()
 		log := logger.Get()
@@ -64,7 +81,8 @@ func init() {
 
 	backfillImageIDsCmd.Flags().Bool("dry-run", false, "report what would be copied without writing anything")
 	backfillImageIDsCmd.Flags().Bool("overwrite", false, "copy even when the id-keyed object already exists")
-	backfillImageIDsCmd.Flags().StringSlice("type", nil, "limit to some of anime,character,staff (default: all)")
+	backfillImageIDsCmd.Flags().StringSlice("type", nil,
+		"limit the run to some of anime,character,staff — repeat or comma-separate; default is all three")
 	// Each worker does a HEAD then a server-side copy, both network-bound, so
 	// this can sit well above the core count.
 	backfillImageIDsCmd.Flags().Int("workers", 32, "concurrent copies")
