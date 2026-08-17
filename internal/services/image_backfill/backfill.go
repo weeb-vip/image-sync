@@ -21,6 +21,8 @@ package image_backfill
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"fmt"
 	"net/url"
 	"path"
 	"strings"
@@ -31,6 +33,42 @@ import (
 	"github.com/weeb-vip/image-sync/internal/services/storage"
 	"go.uber.org/zap"
 )
+
+// Group names, in the order Run walks them. Exported so the command can
+// validate --type against exactly what Run understands rather than a second,
+// drifting copy of the list.
+const (
+	GroupAnime     = "anime"
+	GroupCharacter = "character"
+	GroupStaff     = "staff"
+)
+
+// Groups is every group a run can cover.
+var Groups = []string{GroupAnime, GroupCharacter, GroupStaff}
+
+// ValidateTypes reports any --type value that is not a known group. Without
+// this an unrecognised name silently matched nothing and the run exited
+// successfully having copied not one object.
+func ValidateTypes(types []string) error {
+	var unknown []string
+	for _, t := range types {
+		ok := false
+		for _, g := range Groups {
+			if strings.EqualFold(t, g) {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			unknown = append(unknown, t)
+		}
+	}
+	if len(unknown) > 0 {
+		return fmt.Errorf("unknown --type %s (known: %s)",
+			strings.Join(unknown, ", "), strings.Join(Groups, ", "))
+	}
+	return nil
+}
 
 type Options struct {
 	// DryRun reports what would be copied without writing anything.
@@ -93,20 +131,36 @@ func (b *Backfiller) Run(ctx context.Context) (Stats, error) {
 	log := logger.FromCtx(ctx)
 
 	all := []group{
-		{name: "anime", dir: "/", recursive: false, buildIdx: b.animeIndex},
-		{name: "character", dir: "/characters/", recursive: true, buildIdx: b.characterIndex},
-		{name: "staff", dir: "/staff/", recursive: true, buildIdx: b.staffIndex},
+		{name: GroupAnime, dir: "/", recursive: false, buildIdx: b.animeIndex},
+		{name: GroupCharacter, dir: "/characters/", recursive: true, buildIdx: b.characterIndex},
+		{name: GroupStaff, dir: "/staff/", recursive: true, buildIdx: b.staffIndex},
 	}
 
-	var total Stats
+	// A group that fails does not take the others down with it. The groups are
+	// independent — different tables, different prefixes — and aborting the run
+	// on the first failure is why staff was never even attempted after the
+	// character index hit PlanetScale's row cap. Failures are collected and
+	// returned at the end, so the command still exits non-zero.
+	var (
+		total  Stats
+		failed []error
+	)
 	for _, g := range all {
 		if !b.wants(g.name) {
 			continue
 		}
+
+		if ctx.Err() != nil {
+			return total, ctx.Err()
+		}
+
 		log.Info("building index", zap.String("group", g.name))
 		idx, err := g.buildIdx(ctx)
 		if err != nil {
-			return total, err
+			log.Error("index failed, skipping group",
+				zap.String("group", g.name), zap.Error(err))
+			failed = append(failed, fmt.Errorf("%s index: %w", g.name, err))
+			continue
 		}
 		log.Info("index built",
 			zap.String("group", g.name),
@@ -116,13 +170,14 @@ func (b *Backfiller) Run(ctx context.Context) (Stats, error) {
 
 		stats, err := b.runGroup(ctx, g, idx)
 		total.add(stats)
-		if err != nil {
-			return total, err
-		}
 		log.Info("group complete", zap.String("group", g.name), zap.Any("stats", stats))
+		if err != nil {
+			log.Error("group failed", zap.String("group", g.name), zap.Error(err))
+			failed = append(failed, fmt.Errorf("%s: %w", g.name, err))
+		}
 	}
 
-	return total, nil
+	return total, errors.Join(failed...)
 }
 
 func (b *Backfiller) wants(name string) bool {
@@ -213,7 +268,7 @@ func (b *Backfiller) runGroup(ctx context.Context, g group, idx *index) (Stats, 
 		}
 		stats.Listed++
 
-		key := path.Base(entry.Path)
+		key := basename(entry.Path)
 		if _, ok := idx.ids[key]; ok {
 			// Already re-keyed by an earlier run, or written by a producer
 			// that is already sending ids.
@@ -252,6 +307,11 @@ func (b *Backfiller) runGroup(ctx context.Context, g group, idx *index) (Stats, 
 
 	stats.add(work)
 	return stats, listErr
+}
+
+// basename is the object key without its prefix directory.
+func basename(p string) string {
+	return path.Base(p)
 }
 
 // index maps an object key back to the row that produced it.
