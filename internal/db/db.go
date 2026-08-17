@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/weeb-vip/image-sync/config"
 	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"time"
 )
@@ -40,5 +41,17 @@ func NewDB(cfg config.DBConfig) *DB {
 	// This helps clean up idle connections
 	sqlDB.SetConnMaxIdleTime(90 * time.Second)
 
+	return &DB{DB: db}
+}
+
+// NewPostgresDB connects to the scraper's source database, which the rescrape
+// report reads mal_id from.
+func NewPostgresDB(cfg config.PostgresConfig) *DB {
+	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DataBase, cfg.SSLMode)
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		panic("failed to connect postgres: " + err.Error())
+	}
 	return &DB{DB: db}
 }

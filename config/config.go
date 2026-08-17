@@ -5,12 +5,13 @@ import (
 )
 
 type Config struct {
-	AppConfig    AppConfig
-	DBConfig     DBConfig
-	PulsarConfig PulsarConfig
-	MinioConfig  MinioConfig
-	KafkaConfig  KafkaConfig
-	WorkerConfig WorkerConfig
+	AppConfig      AppConfig
+	DBConfig       DBConfig
+	PostgresConfig PostgresConfig
+	PulsarConfig   PulsarConfig
+	MinioConfig    MinioConfig
+	KafkaConfig    KafkaConfig
+	WorkerConfig   WorkerConfig
 }
 
 type AppConfig struct {
@@ -26,6 +27,18 @@ type DBConfig struct {
 	Password string `required:"true" env:"DBPASSWORD" default:"mysecretpassword"`
 	Port     uint   `default:"3306" env:"DBPORT"`
 	SSLMode  string `default:"false" env:"DBSSL"`
+}
+
+// PostgresConfig points at the scraper's source database. Only the rescrape
+// report uses it: that is where mal_id lives, and the MySQL side has no
+// equivalent column to build a MyAnimeList URL from.
+type PostgresConfig struct {
+	Host     string `default:"localhost" env:"PGHOST"`
+	DataBase string `default:"anime" env:"PGDATABASE"`
+	User     string `default:"postgres" env:"PGUSER"`
+	Password string `default:"mysecretpassword" env:"PGPASSWORD"`
+	Port     uint   `default:"5432" env:"PGPORT"`
+	SSLMode  string `default:"disable" env:"PGSSLMODE"`
 }
 
 type PulsarConfig struct {
