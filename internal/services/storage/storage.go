@@ -21,4 +21,7 @@ type Storage interface {
 	// Copy duplicates an object server-side; the source is left in place.
 	Copy(ctx context.Context, srcPath, dstPath string) error
 	Exists(ctx context.Context, path string) (bool, error)
+	// Stat reports an object's size. Used to tell an unchanged image from a
+	// genuinely new one without downloading it.
+	Stat(ctx context.Context, path string) (size int64, found bool, err error)
 }

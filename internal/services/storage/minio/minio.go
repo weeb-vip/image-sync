@@ -122,6 +122,17 @@ func (m *MinioStorageImpl) List(ctx context.Context, path string, recursive bool
 	return out
 }
 
+func (m *MinioStorageImpl) Stat(ctx context.Context, path string) (int64, bool, error) {
+	info, err := m.Client.StatObject(ctx, m.Bucket, m.objectKey(path), minio.StatObjectOptions{})
+	if err != nil {
+		if minio.ToErrorResponse(err).StatusCode == http.StatusNotFound {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+	return info.Size, true, nil
+}
+
 func (m *MinioStorageImpl) Copy(ctx context.Context, srcPath, dstPath string) error {
 	_, err := m.Client.CopyObject(ctx,
 		minio.CopyDestOptions{Bucket: m.Bucket, Object: m.objectKey(dstPath)},
