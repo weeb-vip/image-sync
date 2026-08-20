@@ -9,6 +9,13 @@ const (
 	TypeCharacter = "Character"
 	TypeStaff     = "Staff"
 	TypeBanner    = "Banner"
+	// TypePoster is the high-resolution series poster from TheTVDB (~680x1000),
+	// which is NOT the same thing as the image at the bucket root. The root
+	// object under an anime's id is the scraper's MyAnimeList image, stored at
+	// MAL's own 225px thumbnail size -- fine for a list row, soft the moment it
+	// fills a phone hero. Both are 2:3 "posters" in the everyday sense, so the
+	// distinction is: root = whatever the scraper had, /posters/ = the good one.
+	TypePoster = "Poster"
 )
 
 // For builds the object path for an image record.
@@ -38,6 +45,8 @@ func For(dataType, id, name string) (string, bool) {
 		return "/staff/" + key, true
 	case TypeBanner:
 		return "/banners/" + key, true
+	case TypePoster:
+		return "/posters/" + key, true
 	default:
 		return "", false
 	}
