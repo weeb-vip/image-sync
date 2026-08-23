@@ -1,5 +1,5 @@
 // Package imagepath owns the one rule that decides where an image lands in the
-// bucket, so the pulsar and kafka processors cannot drift apart.
+// bucket, so the Kafka and NATS processors cannot drift apart.
 package imagepath
 
 import "net/url"

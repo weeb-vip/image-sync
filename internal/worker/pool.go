@@ -11,15 +11,15 @@ type Job[T any] struct {
 }
 
 type Pool[T any] struct {
-	workers    int
-	jobQueue   chan Job[T]
-	quit       chan bool
-	wg         sync.WaitGroup
-	processor  func(ctx context.Context, data T) error
+	workers   int
+	jobQueue  chan Job[T]
+	quit      chan bool
+	wg        sync.WaitGroup
+	processor func(ctx context.Context, data T) error
 }
 
 func NewPool[T any](workers int, bufferSize int, processor func(ctx context.Context, data T) error) *Pool[T] {
-	return &Pool[T] {
+	return &Pool[T]{
 		workers:   workers,
 		jobQueue:  make(chan Job[T], bufferSize),
 		quit:      make(chan bool),

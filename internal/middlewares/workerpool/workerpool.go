@@ -2,9 +2,9 @@ package workerpool
 
 import (
 	"context"
-	"sync"
 	"github.com/ThatCatDev/ep/v2/drivers"
 	"github.com/ThatCatDev/ep/v2/event"
+	"sync"
 )
 
 type Config struct {

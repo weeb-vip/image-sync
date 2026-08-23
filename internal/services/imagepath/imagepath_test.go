@@ -3,7 +3,7 @@ package imagepath
 import "testing"
 
 // For is the one rule that decides where an object lands in the bucket. Both the
-// pulsar and the kafka processor call it, and a wrong answer here is not a
+// both transports' processors call it, and a wrong answer here is not a
 // visible failure -- it is an upload that reports success into a path nothing
 // serves, which is exactly how a prefix bug once hid for a week.
 func TestFor(t *testing.T) {

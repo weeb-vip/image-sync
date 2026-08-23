@@ -14,6 +14,10 @@ const (
 )
 
 type Payload struct {
+	Data ImageSchema `json:"data"`
+}
+
+type ImageSchema struct {
 	// ID is what the object is keyed by. Name is kept only so messages
 	// published before producers sent ids still land somewhere sensible.
 	ID   string `json:"id"`
