@@ -24,21 +24,23 @@ func NewDB(cfg config.DBConfig) *DB {
 		panic("failed to get database connection")
 	}
 
-	// Set maximum number of open connections
-	// This prevents too many connections to the database
-	sqlDB.SetMaxOpenConns(25)
+	// The pool is sized to be reused rather than refilled.
+	//
+	// MaxIdleConns matches MaxOpenConns deliberately: Go only retains up to
+	// MaxIdleConns, so anything opened above it is closed again the moment the
+	// query finishes -- TCP, TLS and auth paid per query rather than once.
+	//
+	// 2 because this is a Kafka consumer: it processes one message at a time,
+	// so the write concurrency is one plus a spare. The previous 25 could never
+	// be used, but counted against a database that allows 79 connections in
+	// total across roughly 36 pods.
+	sqlDB.SetMaxOpenConns(2)
+	sqlDB.SetMaxIdleConns(2)
 
-	// Set maximum number of idle connections
-	// This maintains a pool of reusable connections
-	sqlDB.SetMaxIdleConns(10)
-
-	// Set maximum lifetime of a connection
-	// MySQL wait_timeout is typically 8 hours, so we set this lower
-	sqlDB.SetConnMaxLifetime(5 * time.Minute)
-
-	// Set maximum idle time for a connection
-	// This helps clean up idle connections
-	sqlDB.SetConnMaxIdleTime(90 * time.Second)
+	// Long enough that connections survive quiet periods and get reused, short
+	// enough that a failover or DNS change is picked up without a restart.
+	sqlDB.SetConnMaxLifetime(30 * time.Minute)
+	sqlDB.SetConnMaxIdleTime(10 * time.Minute)
 
 	return &DB{DB: db}
 }
