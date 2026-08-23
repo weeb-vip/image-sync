@@ -8,9 +8,9 @@ type Config struct {
 	AppConfig      AppConfig
 	DBConfig       DBConfig
 	PostgresConfig PostgresConfig
-	PulsarConfig   PulsarConfig
 	MinioConfig    MinioConfig
 	KafkaConfig    KafkaConfig
+	NatsConfig     NatsConfig
 	WorkerConfig   WorkerConfig
 }
 
@@ -41,12 +41,6 @@ type PostgresConfig struct {
 	SSLMode  string `default:"disable" env:"PGSSLMODE"`
 }
 
-type PulsarConfig struct {
-	URL              string `default:"pulsar://localhost:6650" env:"PULSARURL"`
-	Topic            string `default:"public/default/myanimelist.public.anime" env:"PULSARTOPIC"`
-	SubscribtionName string `default:"my-sub" env:"PULSARSUBSCRIPTIONNAME"`
-}
-
 type MinioConfig struct {
 	Endpoint        string `default:"localhost:9000" env:"MINIO_ENDPOINT"`
 	AccessKeyID     string `default:"minio" env:"MINIO_ACCESS_KEY_ID"`
@@ -68,6 +62,29 @@ type WorkerConfig struct {
 	ImageProcessorWorkers      int `default:"4" env:"WORKER_IMAGE_PROCESSOR_COUNT"`
 	KafkaImageProcessorWorkers int `default:"4" env:"WORKER_KAFKA_IMAGE_PROCESSOR_COUNT"`
 	BufferSize                 int `default:"100" env:"WORKER_BUFFER_SIZE"`
+}
+
+// NatsConfig mirrors KafkaConfig, so moving between the two is one substitution
+// per setting.
+type NatsConfig struct {
+	URL string `default:"nats://localhost:4222" env:"NATSURL"`
+
+	// The durable consumer name -- the closest equivalent to a Kafka consumer
+	// group. Left empty the consumer is ephemeral and loses its position on
+	// restart.
+	ConsumerGroupName string `default:"image-sync-nats" env:"NATSCONSUMERGROUPNAME"`
+
+	// Empty on purpose, unlike the CDC consumers.
+	//
+	// image-sync is produced by the sync services, not by Debezium, so no other
+	// stream declares it and the driver should create one from the subject.
+	// Naming Debezium's stream here would try to graft image-sync onto the CDC
+	// stream, whose retention is sized for change events rather than this.
+	StreamName string `env:"NATSSTREAMNAME"`
+
+	Offset string `default:"earliest" env:"NATSOFFSET"`
+
+	Subject string `default:"image-sync" env:"NATSSUBJECT"`
 }
 
 func LoadConfigOrPanic() Config {

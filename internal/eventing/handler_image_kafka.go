@@ -10,7 +10,7 @@ import (
 	"github.com/weeb-vip/image-sync/config"
 	"github.com/weeb-vip/image-sync/internal/logger"
 	"github.com/weeb-vip/image-sync/internal/middlewares/workerpool"
-	"github.com/weeb-vip/image-sync/internal/services/image_processor_kafka"
+	"github.com/weeb-vip/image-sync/internal/services/image_processor"
 	"github.com/weeb-vip/image-sync/internal/services/storage/minio"
 	"go.uber.org/zap"
 )
@@ -52,7 +52,7 @@ func EventingImageKafka() error {
 	}(driver)
 
 	log.Info("Creating processor for Kafka messages", zap.String("topic", cfg.KafkaConfig.Topic))
-	imageProcessor := image_processor.NewImageProcessor(store)
+	imageProcessor := image_processor.NewImageProcessor[*kafka.Message](store)
 
 	// Create worker pool middleware
 	workerPoolMiddleware := workerpool.NewWorkerPoolMiddleware[*kafka.Message, image_processor.Payload](driver, workerpool.Config{
