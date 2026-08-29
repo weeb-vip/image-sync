@@ -12,6 +12,12 @@ import (
 	"github.com/weeb-vip/image-sync/internal/services/image_processor"
 	"github.com/weeb-vip/image-sync/internal/services/storage/minio"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+)
+
+const (
+	maxRetries     = 3
+	retryHeaderKey = "retry"
 )
 
 // EventingImageNats is the NATS counterpart of EventingImageKafka.
@@ -68,21 +74,57 @@ func EventingImageNats() error {
 
 	log.Info("Started NATS worker pool middleware", zap.Int("workers", cfg.WorkerConfig.KafkaImageProcessorWorkers), zap.Int("bufferSize", cfg.WorkerConfig.BufferSize))
 
-	processorInstance := processor.NewProcessor[*epNats.Message, image_processor.Payload](driver, cfg.NatsConfig.Subject, workerPoolMiddleware.Process)
+	retrySubject := cfg.NatsConfig.Subject + "-retry"
+	dlqSubject := cfg.NatsConfig.Subject + "-dlq"
 
-	log.Info("initializing backoff retry middleware", zap.String("subject", cfg.NatsConfig.Subject))
-	backoffRetryInstance := backoffretry.NewBackoffRetry[image_processor.Payload](driver, backoffretry.Config{
-		MaxRetries: 3,
-		HeaderKey:  "retry",
-		RetryQueue: cfg.NatsConfig.Subject + "-retry",
+	// The retry consumer runs in this same process rather than a second
+	// deployment. It needs its own driver because the durable consumer name is
+	// driver-level configuration, not per-subject: two Consume calls on one
+	// driver would call CreateOrUpdateConsumer with the same durable name and
+	// different filter subjects, and the second would reconfigure the first.
+	retryDriver := epNats.NewNatsDriver(&epNats.Config{
+		URL:                     cfg.NatsConfig.URL,
+		ConsumerGroupName:       cfg.NatsConfig.ConsumerGroupName + "-retry",
+		StreamName:              cfg.NatsConfig.StreamName,
+		ConsumerAutoOffsetReset: &cfg.NatsConfig.Offset,
 	})
+	defer func(d drivers.Driver[*epNats.Message]) {
+		if err := d.Close(); err != nil {
+			log.Error("Error closing NATS retry driver", zap.String("error", err.Error()))
+		}
+	}(retryDriver)
 
-	log.Info("Starting NATS processor", zap.String("subject", cfg.NatsConfig.Subject))
-	err := processorInstance.
-		AddMiddleware(backoffRetryInstance.Process).
-		Run(ctx)
+	processorInstance := processor.NewProcessor[*epNats.Message, image_processor.Payload](driver, cfg.NatsConfig.Subject, workerPoolMiddleware.Process).
+		AddMiddleware(backoffretry.NewBackoffRetry[image_processor.Payload](driver, backoffretry.Config{
+			MaxRetries: maxRetries,
+			HeaderKey:  retryHeaderKey,
+			RetryQueue: retrySubject,
+		}).Process)
 
-	if err != nil && ctx.Err() == nil { // Ignore error if caused by context cancellation
+	// Exhausted retries go to a dead-letter subject rather than back onto the
+	// retry subject. ep acks and drops a message once the counter reaches
+	// MaxRetries, so cycling it here would make a permanently failing message
+	// disappear with no record.
+	retryProcessorInstance := processor.NewProcessor[*epNats.Message, image_processor.Payload](retryDriver, retrySubject, workerPoolMiddleware.Process).
+		AddMiddleware(backoffretry.NewBackoffRetry[image_processor.Payload](retryDriver, backoffretry.Config{
+			MaxRetries: maxRetries,
+			HeaderKey:  retryHeaderKey,
+			RetryQueue: dlqSubject,
+		}).Process)
+
+	log.Info("Starting NATS processors",
+		zap.String("subject", cfg.NatsConfig.Subject),
+		zap.String("retry_subject", retrySubject),
+		zap.String("dlq_subject", dlqSubject))
+
+	// One consumer returning must stop the other: Consume blocks until its
+	// iterator is stopped, so without cancelling here a dead main consumer
+	// would leave the process alive and apparently healthy.
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.Go(func() error { return processorInstance.Run(groupCtx) })
+	group.Go(func() error { return retryProcessorInstance.Run(groupCtx) })
+
+	if err := group.Wait(); err != nil && ctx.Err() == nil { // Ignore error if caused by context cancellation
 		log.Error("Error consuming messages", zap.String("error", err.Error()))
 		return err
 	}
