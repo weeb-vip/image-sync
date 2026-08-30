@@ -11,6 +11,7 @@ const (
 	DataTypeStaff     DataType = imagepath.TypeStaff
 	DataTypeBanner    DataType = imagepath.TypeBanner
 	DataTypePoster    DataType = imagepath.TypePoster
+	DataTypeWork      DataType = imagepath.TypeWork
 )
 
 type Payload struct {

@@ -16,6 +16,12 @@ const (
 	// fills a phone hero. Both are 2:3 "posters" in the everyday sense, so the
 	// distinction is: root = whatever the scraper had, /posters/ = the good one.
 	TypePoster = "Poster"
+
+	// TypeWork is a source work's cover -- manga, light novel, novel. Kept under
+	// its own prefix rather than at the root beside anime because the root is
+	// keyed by anime id and a work id there would be indistinguishable from one,
+	// which is exactly the kind of collision this package exists to prevent.
+	TypeWork = "Work"
 )
 
 // For builds the object path for an image record.
@@ -47,6 +53,8 @@ func For(dataType, id, name string) (string, bool) {
 		return "/banners/" + key, true
 	case TypePoster:
 		return "/posters/" + key, true
+	case TypeWork:
+		return "/works/" + key, true
 	default:
 		return "", false
 	}
