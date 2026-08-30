@@ -22,6 +22,7 @@ func TestFor(t *testing.T) {
 		{"staff", TypeStaff, id, "", "/staff/" + id, true},
 		{"banner", TypeBanner, id, "", "/banners/" + id, true},
 		{"poster is its own path, not the root", TypePoster, id, "", "/posters/" + id, true},
+		{"work", TypeWork, id, "", "/works/" + id, true},
 
 		// Name is only a fallback for messages published before producers sent
 		// ids: in-flight during a rolling deploy, and the retry topic.
@@ -63,5 +64,16 @@ func TestPosterDoesNotCollideWithAnimeRoot(t *testing.T) {
 	}
 	if root == poster {
 		t.Fatalf("anime and poster resolved to the same path %q", root)
+	}
+
+	// A work and an anime are different records that could share an id shape.
+	// If a work ever landed at the root it would overwrite an anime's poster,
+	// and nothing downstream would report it -- the upload succeeds either way.
+	work, ok := For(TypeWork, id, "")
+	if !ok {
+		t.Fatal("work path not ok")
+	}
+	if work == root {
+		t.Fatalf("work and anime resolved to the same path %q", work)
 	}
 }
