@@ -52,7 +52,7 @@ func EventingImageKafka() error {
 	}(driver)
 
 	log.Info("Creating processor for Kafka messages", zap.String("topic", cfg.KafkaConfig.Topic))
-	imageProcessor := image_processor.NewImageProcessor[*kafka.Message](store)
+	imageProcessor := image_processor.NewImageProcessor[*kafka.Message](store, nil)
 
 	// Create worker pool middleware
 	workerPoolMiddleware := workerpool.NewWorkerPoolMiddleware[*kafka.Message, image_processor.Payload](driver, workerpool.Config{

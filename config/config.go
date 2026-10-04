@@ -85,6 +85,10 @@ type NatsConfig struct {
 	Offset string `default:"earliest" env:"NATSOFFSET"`
 
 	Subject string `default:"image-sync" env:"NATSSUBJECT"`
+
+	// Where a stored object is announced for whoever wants to post-process it
+	// (upscaler-service). Empty turns the announcement off.
+	StoredSubject string `default:"image-stored" env:"NATS_STORED_SUBJECT"`
 }
 
 func LoadConfigOrPanic() Config {

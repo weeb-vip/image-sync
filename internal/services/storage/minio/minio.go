@@ -45,16 +45,37 @@ func (m *MinioStorageImpl) objectKey(path string) string {
 }
 
 func (m *MinioStorageImpl) Put(ctx context.Context, data []byte, path string) error {
-	log := logger.FromCtx(ctx)
-	log.Info("uploading to minio", zap.String("path", m.objectKey(path)))
-	_, err := m.Client.PutObject(ctx, m.Bucket, m.objectKey(path), bytes.NewReader(data), int64(len(data)), minio.PutObjectOptions{
-		ContentType: "application/octet-stream",
-	})
+	return m.PutObject(ctx, data, path, "application/octet-stream", nil)
+}
 
+func (m *MinioStorageImpl) PutObject(ctx context.Context, data []byte, path, contentType string, meta map[string]string) error {
+	log := logger.FromCtx(ctx)
+	log.Info("uploading to minio", zap.String("path", m.objectKey(path)), zap.String("contentType", contentType))
+	_, err := m.Client.PutObject(ctx, m.Bucket, m.objectKey(path), bytes.NewReader(data), int64(len(data)), minio.PutObjectOptions{
+		ContentType:  contentType,
+		UserMetadata: meta,
+	})
 	if err != nil {
 		log.Error("error uploading to minio", zap.String("path", path), zap.String("error", err.Error()))
 	}
 	return err
+}
+
+func (m *MinioStorageImpl) Head(ctx context.Context, path string) (storage.Info, bool, error) {
+	info, err := m.Client.StatObject(ctx, m.Bucket, m.objectKey(path), minio.StatObjectOptions{})
+	if err != nil {
+		if minio.ToErrorResponse(err).StatusCode == http.StatusNotFound {
+			return storage.Info{}, false, nil
+		}
+		return storage.Info{}, false, err
+	}
+	// S3 hands user metadata back with canonical header casing
+	// ("Source-Length"); callers key on what they wrote.
+	meta := make(map[string]string, len(info.UserMetadata))
+	for k, v := range info.UserMetadata {
+		meta[strings.ToLower(k)] = v
+	}
+	return storage.Info{Size: info.Size, Meta: meta}, true, nil
 }
 
 func (m *MinioStorageImpl) Get(ctx context.Context, path string) ([]byte, error) {

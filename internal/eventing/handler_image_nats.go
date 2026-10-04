@@ -61,7 +61,13 @@ func EventingImageNats() error {
 	}(driver)
 
 	log.Info("Creating processor for NATS messages", zap.String("subject", cfg.NatsConfig.Subject))
-	imageProcessor := image_processor.NewImageProcessor[*epNats.Message](store)
+	// Stored objects are announced on their own subject, through the same
+	// connection; a consumer that is not there yet costs a warning per image.
+	var announce image_processor.Publish
+	if cfg.NatsConfig.StoredSubject != "" {
+		announce = NatsProducer(ctx, driver, cfg.NatsConfig.StoredSubject)
+	}
+	imageProcessor := image_processor.NewImageProcessor[*epNats.Message](store, announce)
 
 	// Create worker pool middleware
 	workerPoolMiddleware := workerpool.NewWorkerPoolMiddleware[*epNats.Message, image_processor.Payload](driver, workerpool.Config{
