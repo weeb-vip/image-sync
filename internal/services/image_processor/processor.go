@@ -1,15 +1,34 @@
 package image_processor
 
 import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"strconv"
+
 	"github.com/ThatCatDev/ep/v2/event"
 	"github.com/weeb-vip/image-sync/internal/logger"
 	"github.com/weeb-vip/image-sync/internal/services/imagepath"
 	"github.com/weeb-vip/image-sync/internal/services/storage"
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
-	"io"
-	"net/http"
 )
+
+// Publish sends one encoded event; nil means nobody is listening.
+type Publish func(ctx context.Context, value []byte) error
+
+// StoredEvent is what goes out on the image-stored subject once an object
+// has been written: enough for a consumer (the upscaler) to find the object
+// and decide whether it wants it, without re-reading the source.
+type StoredEvent struct {
+	// Path is bucket-prefix-relative and leading-slashed, as Storage takes it.
+	Path        string `json:"path"`
+	Type        string `json:"type"`
+	ID          string `json:"id"`
+	SourceURL   string `json:"source_url"`
+	Size        int    `json:"size"`
+	ContentType string `json:"content_type"`
+}
 
 // The driver message type is a parameter because the processor never looks at
 // it. Nothing here reads DriverMessage, RawData or Headers -- only Payload,
@@ -22,11 +41,16 @@ type ImageProcessor[DM any] interface {
 
 type ImageProcessorImpl[DM any] struct {
 	Storage storage.Storage
+	// Publish announces a stored object; nil publishes nothing. A failure to
+	// announce is logged and swallowed: the image is stored either way, and
+	// the announcement is for a consumer that may not be deployed.
+	Publish Publish
 }
 
-func NewImageProcessor[DM any](store storage.Storage) ImageProcessor[DM] {
+func NewImageProcessor[DM any](store storage.Storage, publish Publish) ImageProcessor[DM] {
 	return &ImageProcessorImpl[DM]{
 		Storage: store,
+		Publish: publish,
 	}
 }
 
@@ -77,17 +101,43 @@ func (p *ImageProcessorImpl[DM]) Process(ctx context.Context, data event.Event[D
 		return data, err
 	}
 
-	// save to storage
-	log.Info("uploading image to storage")
-
-	err = p.Storage.Put(ctx, imageData, path)
+	// save to storage, with the real content type (it used to be
+	// octet-stream for everything) and the source's length, which is what
+	// `unchanged` compares against from now on.
+	contentType := http.DetectContentType(imageData)
+	meta := map[string]string{
+		storage.MetaSourceLength: strconv.Itoa(len(imageData)),
+		storage.MetaSourceURL:    dataPayload.URL,
+	}
+	log.Info("uploading image to storage", zap.String("contentType", contentType))
+	err = p.Storage.PutObject(ctx, imageData, path, contentType, meta)
 	if err != nil {
 		log.Error("error uploading image to storage", zap.String("error", err.Error()))
 		return data, err
 	}
 	log.Info("image processing complete", zap.String("path", path))
-	return data, nil
 
+	p.announce(ctx, StoredEvent{
+		Path: path, Type: dataPayload.Type, ID: dataPayload.ID, SourceURL: dataPayload.URL,
+		Size: len(imageData), ContentType: contentType,
+	})
+	return data, nil
+}
+
+func (p *ImageProcessorImpl[DM]) announce(ctx context.Context, ev StoredEvent) {
+	if p.Publish == nil {
+		return
+	}
+	log := logger.FromCtx(ctx)
+	body, err := json.Marshal(ev)
+	if err != nil {
+		log.Error("could not encode stored event", zap.Error(err))
+		return
+	}
+	if err := p.Publish(ctx, body); err != nil {
+		log.Warn("stored event not published; the object is stored regardless",
+			zap.String("path", ev.Path), zap.Error(err))
+	}
 }
 
 // unchanged reports whether the stored object already matches the source.
@@ -96,9 +146,21 @@ func (p *ImageProcessorImpl[DM]) Process(ctx context.Context, data event.Event[D
 // does not report a length, a HEAD it will not answer -- returns false, so the
 // image is fetched. The cost of being wrong here is one redundant download,
 // against silently serving stale artwork forever.
+// unchanged: the object we hold came from a source of the same length as
+// the one on offer. The stored source length wins where it exists; an object
+// written before it was recorded falls back to its own size, which is right
+// for an untouched download and wrong only for an object something has since
+// rewritten -- those get the metadata on their next write.
 func unchanged(ctx context.Context, store storage.Storage, path, src string) bool {
-	size, found, err := store.Stat(ctx, path)
-	if err != nil || !found || size <= 0 {
+	info, found, err := store.Head(ctx, path)
+	if err != nil || !found {
+		return false
+	}
+	size := info.Size
+	if recorded, err := strconv.ParseInt(info.Meta[storage.MetaSourceLength], 10, 64); err == nil && recorded > 0 {
+		size = recorded
+	}
+	if size <= 0 {
 		return false
 	}
 
