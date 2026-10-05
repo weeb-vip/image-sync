@@ -74,6 +74,14 @@ func (p *ImageProcessorImpl[DM]) Process(ctx context.Context, data event.Event[D
 		return data, nil
 	}
 
+	// The larger copy where the source has one. Decided before the skip
+	// rule, so an object stored from the small copy is replaced once by the
+	// large one (its recorded source length differs) and then left alone.
+	if large := preferredSource(ctx, dataPayload.URL); large != dataPayload.URL {
+		log.Info("using the larger source", zap.String("url", large))
+		dataPayload.URL = large
+	}
+
 	// A message arrives on every anime update, not only when the artwork
 	// changes, so the image we already hold is usually the one being offered
 	// again. Comparing the stored size against the source's Content-Length

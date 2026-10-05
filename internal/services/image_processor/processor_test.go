@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -45,13 +46,16 @@ func (m *memStore) PutObject(_ context.Context, data []byte, path, ct string, me
 	return nil
 }
 func (m *memStore) Get(_ context.Context, path string) ([]byte, error) { return m.objs[path].data, nil }
-func (m *memStore) Delete(_ context.Context, path string) error       { delete(m.objs, path); return nil }
+func (m *memStore) Delete(_ context.Context, path string) error        { delete(m.objs, path); return nil }
 func (m *memStore) List(context.Context, string, bool) <-chan storage.Entry {
 	ch := make(chan storage.Entry)
 	close(ch)
 	return ch
 }
-func (m *memStore) Copy(_ context.Context, src, dst string) error { m.objs[dst] = m.objs[src]; return nil }
+func (m *memStore) Copy(_ context.Context, src, dst string) error {
+	m.objs[dst] = m.objs[src]
+	return nil
+}
 func (m *memStore) Exists(_ context.Context, path string) (bool, error) {
 	_, ok := m.objs[path]
 	return ok, nil
@@ -189,5 +193,78 @@ func TestAFailedAnnouncementDoesNotFailTheStore(t *testing.T) {
 
 	if _, ok := store.objs["/id-1"]; !ok {
 		t.Fatal("object not stored")
+	}
+}
+
+func TestLargerVariantNamesTheLCopyOfAMyAnimeListImage(t *testing.T) {
+	cases := map[string]string{
+		"https://cdn.myanimelist.net/images/anime/1668/108792.jpg":     "https://cdn.myanimelist.net/images/anime/1668/108792l.jpg",
+		"https://cdn.myanimelist.net/images/characters/9/310307.jpg":   "https://cdn.myanimelist.net/images/characters/9/310307l.jpg",
+		"https://cdn.myanimelist.net/images/anime/1668/108792l.jpg":    "", // already the large copy
+		"https://cdn.myanimelist.net/images/anime/1668/108792.jpg?s=1": "https://cdn.myanimelist.net/images/anime/1668/108792l.jpg?s=1",
+		"https://artworks.thetvdb.com/banners/posters/12345.jpg":       "", // not MyAnimeList
+		"https://cdn.myanimelist.net/images/questionmark_23.gif":       "",
+		"not a url": "",
+	}
+	for in, want := range cases {
+		if got := largerVariant(in); got != want {
+			t.Errorf("%s -> %q, want %q", in, got, want)
+		}
+	}
+}
+
+// The large copy is stored when it is there, and its length is what gets
+// recorded, so the next event compares against the right source.
+func TestTheLargerCopyIsStoredWhenItExists(t *testing.T) {
+	large := append(jpeg, make([]byte, 400)...)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := jpeg
+		if strings.HasSuffix(r.URL.Path, "l.jpg") {
+			body = large
+		}
+		w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+		if r.Method == http.MethodGet {
+			w.Write(body)
+		}
+	}))
+	defer srv.Close()
+	host := strings.TrimPrefix(srv.URL, "http://")
+	malHosts[host] = true
+	defer delete(malHosts, host)
+
+	store := newMemStore()
+	p := NewImageProcessor[string](store, nil)
+	run(t, p, srv.URL+"/images/anime/1/2.jpg")
+
+	o := store.objs["/id-1"]
+	if len(o.data) != len(large) {
+		t.Fatalf("stored %d bytes, want the large copy (%d)", len(o.data), len(large))
+	}
+	if o.meta[storage.MetaSourceLength] != strconv.Itoa(len(large)) || !strings.HasSuffix(o.meta[storage.MetaSourceURL], "/2l.jpg") {
+		t.Errorf("meta %v", o.meta)
+	}
+}
+
+func TestFallsBackToTheSmallCopyWhenThereIsNoLargeOne(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "l.jpg") {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Length", strconv.Itoa(len(jpeg)))
+		if r.Method == http.MethodGet {
+			w.Write(jpeg)
+		}
+	}))
+	defer srv.Close()
+	host := strings.TrimPrefix(srv.URL, "http://")
+	malHosts[host] = true
+	defer delete(malHosts, host)
+
+	store := newMemStore()
+	run(t, NewImageProcessor[string](store, nil), srv.URL+"/images/anime/1/2.jpg")
+
+	if len(store.objs["/id-1"].data) != len(jpeg) {
+		t.Fatal("the small copy should have been stored")
 	}
 }
