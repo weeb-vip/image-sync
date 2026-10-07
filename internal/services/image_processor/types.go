@@ -25,4 +25,8 @@ type ImageSchema struct {
 	Name string `json:"name"`
 	URL  string `json:"url"`
 	Type string `json:"type"`
+	// Force asks for the object to be written and announced even when the
+	// bucket already holds exactly this source: the producer's way of saying
+	// "re-pull", as refresh-images does locally.
+	Force bool `json:"force,omitempty"`
 }

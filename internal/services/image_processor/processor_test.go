@@ -268,3 +268,80 @@ func TestFallsBackToTheSmallCopyWhenThereIsNoLargeOne(t *testing.T) {
 		t.Fatal("the small copy should have been stored")
 	}
 }
+
+// refresh-images: the deliberate re-pull. The bucket already holds exactly
+// this source, so Process would skip; Refresh fetches, writes and announces
+// anyway, and the object comes back without any upscale provenance.
+func TestRefreshStoresAndAnnouncesAnUnchangedSourceAgain(t *testing.T) {
+	store := newMemStore()
+	srv, gets := source(t, jpeg)
+	var published []StoredEvent
+	p := NewImageProcessor[string](store, func(_ context.Context, b []byte) error {
+		var ev StoredEvent
+		json.Unmarshal(b, &ev)
+		published = append(published, ev)
+		return nil
+	})
+	src := srv.URL + "/x.jpg"
+	run(t, p, src)
+	if *gets != 1 || len(published) != 1 {
+		t.Fatalf("first store: gets=%d published=%d", *gets, len(published))
+	}
+	// An upscaler pass marked the object; Process now leaves it alone.
+	o := store.objs["/id-1"]
+	o.meta["upscaled"] = "x"
+	store.objs["/id-1"] = o
+	run(t, p, src)
+	if *gets != 1 {
+		t.Fatalf("Process re-fetched an unchanged source: gets=%d", *gets)
+	}
+
+	if err := p.Refresh(context.Background(), ImageSchema{ID: "id-1", URL: src, Type: DataTypeAnime}); err != nil {
+		t.Fatal(err)
+	}
+	if *gets != 2 {
+		t.Errorf("Refresh did not fetch: gets=%d", *gets)
+	}
+	if len(published) != 2 || published[1].Path != "/id-1" {
+		t.Errorf("Refresh did not announce: %+v", published)
+	}
+	if store.objs["/id-1"].meta["upscaled"] != "" {
+		t.Error("the refreshed object still carries upscale provenance")
+	}
+}
+
+func TestRefreshFailsOnASourceThatIsGone(t *testing.T) {
+	store := newMemStore()
+	srv := httptest.NewServer(http.NotFoundHandler())
+	defer srv.Close()
+	p := NewImageProcessor[string](store, nil)
+	err := p.Refresh(context.Background(), ImageSchema{ID: "id-1", URL: srv.URL + "/gone.jpg", Type: DataTypeAnime})
+	if err == nil {
+		t.Fatal("a 404 source must be an error, not an empty object")
+	}
+	if _, ok := store.objs["/id-1"]; ok {
+		t.Error("the 404 body was stored")
+	}
+}
+
+// A producer can ask for the re-pull itself: thetvdb-enrichment's artwork
+// sync with --force sets it on the message.
+func TestAForcedMessageIsStoredAndAnnouncedAgain(t *testing.T) {
+	store := newMemStore()
+	srv, gets := source(t, jpeg)
+	var published int
+	p := NewImageProcessor[string](store, func(context.Context, []byte) error { published++; return nil })
+	src := srv.URL + "/x.jpg"
+	run(t, p, src)
+	run(t, p, src)
+	if *gets != 1 || published != 1 {
+		t.Fatalf("plain replay: gets=%d published=%d", *gets, published)
+	}
+	ev := event.Event[string, Payload]{Payload: Payload{Data: ImageSchema{ID: "id-1", URL: src, Type: DataTypeAnime, Force: true}}}
+	if _, err := p.Process(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	if *gets != 2 || published != 2 {
+		t.Errorf("forced: gets=%d published=%d", *gets, published)
+	}
+}
