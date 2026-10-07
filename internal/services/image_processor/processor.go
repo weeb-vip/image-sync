@@ -2,6 +2,7 @@ package image_processor
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -37,6 +38,11 @@ type StoredEvent struct {
 // signature; none of the logic was ever Kafka-specific.
 type ImageProcessor[DM any] interface {
 	Process(ctx context.Context, data event.Event[DM, Payload]) (event.Event[DM, Payload], error)
+	// Refresh stores an image again whether or not the source has changed:
+	// the deliberate re-pull, for art that should be fetched and announced
+	// anew (a refreshed object carries no upscale provenance, so the
+	// upscaler redoes it from the larger source).
+	Refresh(ctx context.Context, image ImageSchema) error
 }
 
 type ImageProcessorImpl[DM any] struct {
@@ -56,22 +62,30 @@ func NewImageProcessor[DM any](store storage.Storage, publish Publish) ImageProc
 
 func (p *ImageProcessorImpl[DM]) Process(ctx context.Context, data event.Event[DM, Payload]) (event.Event[DM, Payload], error) {
 	log := logger.FromCtx(ctx)
-
-	dataPayload := data.Payload.Data
 	log.Info("New record")
-	// new record
-	// log after payload
 	log.Info("Got message", zap.Any("payload", data.Payload))
+	return data, p.store(ctx, data.Payload.Data, false)
+}
+
+func (p *ImageProcessorImpl[DM]) Refresh(ctx context.Context, image ImageSchema) error {
+	return p.store(ctx, image, true)
+}
+
+// store fetches the image and writes it under its path. With force the
+// unchanged check is skipped: the object is written and announced even when
+// the bucket already holds exactly this source.
+func (p *ImageProcessorImpl[DM]) store(ctx context.Context, dataPayload ImageSchema, force bool) error {
+	log := logger.FromCtx(ctx)
 
 	if dataPayload.URL == "" {
-		log.Warn("skipping message with empty image url", zap.Any("payload", data.Payload))
-		return data, nil
+		log.Warn("skipping message with empty image url", zap.Any("image", dataPayload))
+		return nil
 	}
 
 	path, ok := imagepath.For(dataPayload.Type, dataPayload.ID, dataPayload.Name)
 	if !ok {
-		log.Warn("skipping message with no storable path", zap.Any("payload", data.Payload))
-		return data, nil
+		log.Warn("skipping message with no storable path", zap.Any("image", dataPayload))
+		return nil
 	}
 
 	// The larger copy where the source has one. Decided before the skip
@@ -91,22 +105,25 @@ func (p *ImageProcessorImpl[DM]) Process(ctx context.Context, data event.Event[D
 	//
 	// This matters in bulk: a backfill touching every anime row would
 	// otherwise pull ~30,000 images from MyAnimeList that we already have.
-	if unchanged(ctx, p.Storage, path, dataPayload.URL) {
+	if !force && unchanged(ctx, p.Storage, path, dataPayload.URL) {
 		log.Info("image already stored and unchanged, skipping download",
 			zap.String("path", path), zap.String("url", dataPayload.URL))
-		return data, nil
+		return nil
 	}
 
 	// download image
 	log.Info("downloading image", zap.String("url", dataPayload.URL))
 	resp, err := http.Get(dataPayload.URL)
 	if err != nil {
-		return data, err
+		return err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("fetch %s: %s", dataPayload.URL, resp.Status)
+	}
 	imageData, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return data, err
+		return err
 	}
 
 	// save to storage, with the real content type (it used to be
@@ -121,7 +138,7 @@ func (p *ImageProcessorImpl[DM]) Process(ctx context.Context, data event.Event[D
 	err = p.Storage.PutObject(ctx, imageData, path, contentType, meta)
 	if err != nil {
 		log.Error("error uploading image to storage", zap.String("error", err.Error()))
-		return data, err
+		return err
 	}
 	log.Info("image processing complete", zap.String("path", path))
 
@@ -129,7 +146,7 @@ func (p *ImageProcessorImpl[DM]) Process(ctx context.Context, data event.Event[D
 		Path: path, Type: dataPayload.Type, ID: dataPayload.ID, SourceURL: dataPayload.URL,
 		Size: len(imageData), ContentType: contentType,
 	})
-	return data, nil
+	return nil
 }
 
 func (p *ImageProcessorImpl[DM]) announce(ctx context.Context, ev StoredEvent) {
