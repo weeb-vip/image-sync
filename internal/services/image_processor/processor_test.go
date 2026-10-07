@@ -323,3 +323,25 @@ func TestRefreshFailsOnASourceThatIsGone(t *testing.T) {
 		t.Error("the 404 body was stored")
 	}
 }
+
+// A producer can ask for the re-pull itself: thetvdb-enrichment's artwork
+// sync with --force sets it on the message.
+func TestAForcedMessageIsStoredAndAnnouncedAgain(t *testing.T) {
+	store := newMemStore()
+	srv, gets := source(t, jpeg)
+	var published int
+	p := NewImageProcessor[string](store, func(context.Context, []byte) error { published++; return nil })
+	src := srv.URL + "/x.jpg"
+	run(t, p, src)
+	run(t, p, src)
+	if *gets != 1 || published != 1 {
+		t.Fatalf("plain replay: gets=%d published=%d", *gets, published)
+	}
+	ev := event.Event[string, Payload]{Payload: Payload{Data: ImageSchema{ID: "id-1", URL: src, Type: DataTypeAnime, Force: true}}}
+	if _, err := p.Process(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	if *gets != 2 || published != 2 {
+		t.Errorf("forced: gets=%d published=%d", *gets, published)
+	}
+}

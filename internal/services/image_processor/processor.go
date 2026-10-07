@@ -64,7 +64,7 @@ func (p *ImageProcessorImpl[DM]) Process(ctx context.Context, data event.Event[D
 	log := logger.FromCtx(ctx)
 	log.Info("New record")
 	log.Info("Got message", zap.Any("payload", data.Payload))
-	return data, p.store(ctx, data.Payload.Data, false)
+	return data, p.store(ctx, data.Payload.Data, data.Payload.Data.Force)
 }
 
 func (p *ImageProcessorImpl[DM]) Refresh(ctx context.Context, image ImageSchema) error {
